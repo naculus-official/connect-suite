@@ -4,18 +4,23 @@ name: Publish
 # lib (lib/v<version>) and appkit (appkit/v<version>) can ship the same version
 # without colliding. Order: preflight -> publish -> tag -> release.
 #
+# group = lib or appkit runs one job. group = both runs lib first and appkit
+# only after lib succeeds, in this one run, because appkit depends on the lib
+# version it is released with.
+#
 # A dry run checks configuration only. It does not prove the release is safe:
 # the registry and tag checks run only on a real publish.
 on:
   workflow_dispatch:
     inputs:
       group:
-        description: 'Release group'
+        description: 'Release group (both = lib, then appkit, in this run)'
         required: true
         type: choice
         options:
           - lib
           - appkit
+          - both
       dry_run:
         description: 'Dry run (no actual publish)'
         required: true
@@ -28,7 +33,7 @@ on:
 jobs:
   publish-lib:
     name: Publish lib
-    if: ${{ inputs.group == 'lib' }}
+    if: ${{ inputs.group == 'lib' || inputs.group == 'both' }}
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -99,7 +104,10 @@ jobs:
 
   publish-appkit:
     name: Publish appkit
-    if: ${{ inputs.group == 'appkit' }}
+    needs: publish-lib
+    # Runs when asked for appkit alone (lib skipped) or after lib succeeded.
+    # `always()` keeps the job from being skipped just because lib was skipped.
+    if: ${{ always() && (inputs.group == 'appkit' || inputs.group == 'both') && (needs.publish-lib.result == 'success' || needs.publish-lib.result == 'skipped') }}
     runs-on: ubuntu-latest
     permissions:
       contents: write
