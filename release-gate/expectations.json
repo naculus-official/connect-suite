@@ -1,0 +1,27 @@
+{
+  "$comment": [
+    "Known-failing probes, each tied to a finding confirmed against real build output.",
+    "A failure listed here is reported as KNOWN and does not fail the gate.",
+    "A failure NOT listed here, or listed with a different code, fails the gate as a regression.",
+    "A probe listed here that passes is reported as FIXED. The runner never edits this file; update it by hand.",
+    "The historical B2 process.env finding was fixed in the distributable core and wallet-engine code.",
+    "Generated Web Component runtime matches may still be reported as portability warnings; see README.",
+    "finding: 'missing-peer-by-design' marks a failure that is intended and permanent. It pins down a",
+    "consumer-visible behaviour this gate exists to observe, not a defect awaiting repair, and it never",
+    "becomes FIXED. Compare with B1/B6/S33, which are real defects."
+  ],
+  "known": [
+    {
+      "id": "import:@naculus/connector-wagmi",
+      "code": "module-resolution",
+      "finding": "missing-peer-by-design",
+      "note": "Not a defect. This consumer deliberately does not install wagmi, so the gate keeps observing what a real consumer hits when a required peer is absent. wagmi is a required peerDependency of @naculus/connector-wagmi, so Vite cannot resolve it and the browser import fails with 'Failed to fetch dynamically imported module: .../@naculus_connector-wagmi.js'. The success path — a consumer that installs wagmi for real — is covered by fixtures/wagmi-consumer, whose typecheck and production build both pass. Do not silence this by installing wagmi here, aliasing it, or stubbing it."
+    },
+    {
+      "id": "build:production",
+      "code": "build-failed",
+      "finding": "missing-peer-by-design",
+      "note": "Same deliberate cause as the import probe above, fatal at build time. The code stays generic; the diagnostic signals live here and must appear in the runner's detail and attribution output: (1) a failure to resolve import \"wagmi\", (2) attribution to @naculus/connector-wagmi, (3) wagmi being a required peer this consumer intentionally does not provide. Before B9 wagmi was an optional peer, the bundler substituted a stub, and the error read '[MISSING_EXPORT] \"ChainNotConfiguredError\" is not exported by \"__vite-optional-peer-dep:wagmi:@naculus/connector-wagmi\"' — misleading, because it looked like the SDK exported something it did not. Requiring the peer removed the stub, so the error now names what to install. Deliberately not pinned to exact bundler wording, which changes between Vite/Rolldown versions."
+    }
+  ]
+}
