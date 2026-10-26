@@ -263,6 +263,22 @@ function transactionFacts(tx: TransactionRequest): SessionKeyTransaction {
   };
 }
 
+/**
+ * Snapshot `tx`, refuse it if it is an EIP-7702 transaction, then derive the
+ * digest and the scope facts from that one snapshot.
+ */
+function deriveSessionTransaction(
+  tx: TransactionRequest,
+  eip7702Refusal: string,
+): { digest: `0x${string}`; facts: SessionKeyTransaction } {
+  const snapshot = snapshotSessionTransaction(tx);
+  refuseEip7702Transaction(snapshot, eip7702Refusal);
+  return {
+    digest: transactionDigest(snapshot),
+    facts: transactionFacts(snapshot),
+  };
+}
+
 function accumulatedTokenSpend(
   spends: StoredSessionKey["accumulatedTokenSpends"],
   tokenAddress: string,
@@ -491,18 +507,9 @@ export class SessionKeyManager {
     messageHash: `0x${string}`,
     tx: SessionKeyTransaction = {},
   ): Promise<`0x${string}`> {
-    // The storage lock covers the complete check/sign/accounting sequence so
-    // two managers (or two browser tabs using Web Locks) cannot both consume
-    // the same remaining budget.
-    return this.storage.withKeyLock(sessionId, () =>
-      this.withSessionLock(sessionId, async () => {
-        const stored = await this.readStoredSession(sessionId);
-        if (!stored) {
-          throw createSessionKeyError("session_key_not_found", sessionId);
-        }
-        this.refuseRawDigest(stored);
-      }),
-    );
+    // Refused for every scope with rails: a caller digest cannot be bound to
+    // the transaction it signs. Use signTransactionWithSessionKey.
+    return this.refuseRawDigestFor(sessionId);
   }
 
   /**
@@ -525,22 +532,11 @@ export class SessionKeyManager {
         if (!stored) {
           throw createSessionKeyError("session_key_not_found", sessionId);
         }
-        this.validateSessionStatus(stored);
-        const expectedMessage = buildExpectedMessage(
-          this.toSessionKeyInfo(stored),
+        await this.assertStoredOffchainPolicyCurrent(
+          stored,
+          buildExpectedMessage,
+          verify,
         );
-        if (
-          !(await this.verifyStoredOffchainAuthorization(
-            stored,
-            expectedMessage,
-            verify,
-          ))
-        ) {
-          throw createSessionKeyError(
-            "session_key_invalid_input",
-            "Off-chain authorization no longer matches the signed policy",
-          );
-        }
         this.refuseRawDigest(stored);
       }),
     );
@@ -559,23 +555,8 @@ export class SessionKeyManager {
     request: SessionKeyTypedDataRequest,
     rail: "x402-exact" | "mpp-charge",
   ): Promise<`0x${string}`> {
-    return this.storage.withKeyLock(sessionId, () =>
-      this.withSessionLock(sessionId, async () => {
-        const stored = await this.readStoredSession(sessionId);
-        if (!stored) {
-          throw createSessionKeyError("session_key_not_found", sessionId);
-        }
-        // One copy for the check, the scope mapping and the digest.
-        if (stored.scope.mode === "eip7702") {
-          throw createSessionKeyError(
-            "session_key_scope_exceeded",
-            "An eip7702 session key signs only delegation redemptions (signDelegationRedemption).",
-          );
-        }
-        const snapshot = snapshotTypedDataRequest(request);
-        const tx = this.typedDataToScopedTransaction(stored, snapshot, rail);
-        return this.signStoredSessionKey(stored, typedDataDigest(snapshot), tx);
-      }),
+    return this.withStoredSession(sessionId, (stored) =>
+      this.signTypedDataStored(stored, request, rail),
     );
   }
 
@@ -587,40 +568,35 @@ export class SessionKeyManager {
     request: SessionKeyTypedDataRequest,
     rail: "x402-exact" | "mpp-charge",
   ): Promise<`0x${string}`> {
-    return this.storage.withKeyLock(sessionId, () =>
-      this.withSessionLock(sessionId, async () => {
-        const stored = await this.readStoredSession(sessionId);
-        if (!stored) {
-          throw createSessionKeyError("session_key_not_found", sessionId);
-        }
-        this.validateSessionStatus(stored);
-        const expectedMessage = buildExpectedMessage(
-          this.toSessionKeyInfo(stored),
-        );
-        if (
-          !(await this.verifyStoredOffchainAuthorization(
-            stored,
-            expectedMessage,
-            verify,
-          ))
-        ) {
-          throw createSessionKeyError(
-            "session_key_invalid_input",
-            "Off-chain authorization no longer matches the signed policy",
-          );
-        }
-        // One copy for the check, the scope mapping and the digest.
-        if (stored.scope.mode === "eip7702") {
-          throw createSessionKeyError(
-            "session_key_scope_exceeded",
-            "An eip7702 session key signs only delegation redemptions (signDelegationRedemption).",
-          );
-        }
-        const snapshot = snapshotTypedDataRequest(request);
-        const tx = this.typedDataToScopedTransaction(stored, snapshot, rail);
-        return this.signStoredSessionKey(stored, typedDataDigest(snapshot), tx);
-      }),
-    );
+    return this.withStoredSession(sessionId, async (stored) => {
+      await this.assertStoredOffchainPolicyCurrent(
+        stored,
+        buildExpectedMessage,
+        verify,
+      );
+      return this.signTypedDataStored(stored, request, rail);
+    });
+  }
+
+  /**
+   * Typed-data checks, then signing. Callers hold the key and session locks
+   * and have already loaded `stored`.
+   */
+  private async signTypedDataStored(
+    stored: StoredSessionKey,
+    request: SessionKeyTypedDataRequest,
+    rail: "x402-exact" | "mpp-charge",
+  ): Promise<`0x${string}`> {
+    // One copy for the check, the scope mapping and the digest.
+    if (stored.scope.mode === "eip7702") {
+      throw createSessionKeyError(
+        "session_key_scope_exceeded",
+        "An eip7702 session key signs only delegation redemptions (signDelegationRedemption).",
+      );
+    }
+    const snapshot = snapshotTypedDataRequest(request);
+    const tx = this.typedDataToScopedTransaction(stored, snapshot, rail);
+    return this.signStoredSessionKey(stored, typedDataDigest(snapshot), tx);
   }
 
   /**
@@ -1030,15 +1006,7 @@ export class SessionKeyManager {
     },
     execution: FrameworkExecution,
   ): Promise<`0x${string}`> {
-    return this.storage.withKeyLock(sessionId, () =>
-      this.withSessionLock(sessionId, async () => {
-        const stored = await this.readStoredSession(sessionId);
-        if (!stored) {
-          throw createSessionKeyError("session_key_not_found", sessionId);
-        }
-        this.refuseRawDigest(stored);
-      }),
-    );
+    return this.refuseRawDigestFor(sessionId);
   }
 
   /**
@@ -1065,44 +1033,38 @@ export class SessionKeyManager {
     },
     execution: FrameworkExecution,
   ): Promise<`0x${string}`> {
-    return this.storage.withKeyLock(sessionId, () =>
-      this.withSessionLock(sessionId, async () => {
-        const stored = await this.readStoredSession(sessionId);
-        if (!stored) {
-          throw createSessionKeyError("session_key_not_found", sessionId);
-        }
-        this.validateSessionStatus(stored);
-        if (!stored.scope.rails?.includes("transfer")) {
-          throw createSessionKeyError(
-            "session_key_scope_exceeded",
-            "A delegation redemption needs the transfer rail in the session scope",
-          );
-        }
-        const { chainId, data } = this.redemptionFor(stored, execution);
-        if (
-          outerTx.chainId !== chainId ||
-          !outerTx.to ||
-          outerTx.to.toLowerCase() !==
-            DELEGATION_FRAMEWORK.delegationManager.toLowerCase() ||
-          BigInt(outerTx.value ?? "0") !== 0n ||
-          (outerTx.data ?? "").toLowerCase() !== data.toLowerCase()
-        ) {
-          throw createSessionKeyError(
-            "session_key_scope_exceeded",
-            "The transaction is not this key's redemption for the execution",
-          );
-        }
-        // The execution is what the scope governs; gas is the key's own spend
-        // on the transaction it sends, so it comes from the outer transaction.
-        return this.signStoredSessionKey(stored, digest, {
-          to: execution.target,
-          value: `0x${execution.value.toString(16)}`,
-          data: execution.callData,
-          chainId,
-          ...(outerTx.gas !== undefined ? { gas: outerTx.gas } : {}),
-        });
-      }),
-    );
+    return this.withStoredSession(sessionId, async (stored) => {
+      this.validateSessionStatus(stored);
+      if (!stored.scope.rails?.includes("transfer")) {
+        throw createSessionKeyError(
+          "session_key_scope_exceeded",
+          "A delegation redemption needs the transfer rail in the session scope",
+        );
+      }
+      const { chainId, data } = this.redemptionFor(stored, execution);
+      if (
+        outerTx.chainId !== chainId ||
+        !outerTx.to ||
+        outerTx.to.toLowerCase() !==
+          DELEGATION_FRAMEWORK.delegationManager.toLowerCase() ||
+        BigInt(outerTx.value ?? "0") !== 0n ||
+        (outerTx.data ?? "").toLowerCase() !== data.toLowerCase()
+      ) {
+        throw createSessionKeyError(
+          "session_key_scope_exceeded",
+          "The transaction is not this key's redemption for the execution",
+        );
+      }
+      // The execution is what the scope governs; gas is the key's own spend
+      // on the transaction it sends, so it comes from the outer transaction.
+      return this.signStoredSessionKey(stored, digest, {
+        to: execution.target,
+        value: `0x${execution.value.toString(16)}`,
+        data: execution.callData,
+        chainId,
+        ...(outerTx.gas !== undefined ? { gas: outerTx.gas } : {}),
+      });
+    });
   }
 
   /**
@@ -1124,13 +1086,11 @@ export class SessionKeyManager {
     sessionId: string,
     tx: TransactionRequest,
   ): Promise<`0x${string}`> {
-    const snapshot = snapshotSessionTransaction(tx);
-    refuseEip7702Transaction(snapshot, PLAIN_TRANSACTION_EIP7702_REFUSAL);
-    return this.signTransactionDigest(
-      sessionId,
-      transactionDigest(snapshot),
-      transactionFacts(snapshot),
+    const { digest, facts } = deriveSessionTransaction(
+      tx,
+      PLAIN_TRANSACTION_EIP7702_REFUSAL,
     );
+    return this.signTransactionDigest(sessionId, digest, facts);
   }
 
   /**
@@ -1145,35 +1105,18 @@ export class SessionKeyManager {
     verify: OffchainAuthorizationVerifier,
     tx: TransactionRequest,
   ): Promise<`0x${string}`> {
-    const snapshot = snapshotSessionTransaction(tx);
-    refuseEip7702Transaction(snapshot, PLAIN_TRANSACTION_EIP7702_REFUSAL);
-    const digest = transactionDigest(snapshot);
-    const facts = transactionFacts(snapshot);
-    return this.storage.withKeyLock(sessionId, () =>
-      this.withSessionLock(sessionId, async () => {
-        const stored = await this.readStoredSession(sessionId);
-        if (!stored) {
-          throw createSessionKeyError("session_key_not_found", sessionId);
-        }
-        this.validateSessionStatus(stored);
-        const expectedMessage = buildExpectedMessage(
-          this.toSessionKeyInfo(stored),
-        );
-        if (
-          !(await this.verifyStoredOffchainAuthorization(
-            stored,
-            expectedMessage,
-            verify,
-          ))
-        ) {
-          throw createSessionKeyError(
-            "session_key_invalid_input",
-            "Off-chain authorization no longer matches the signed policy",
-          );
-        }
-        return this.signTransactionStored(stored, digest, facts);
-      }),
+    const { digest, facts } = deriveSessionTransaction(
+      tx,
+      PLAIN_TRANSACTION_EIP7702_REFUSAL,
     );
+    return this.withStoredSession(sessionId, async (stored) => {
+      await this.assertStoredOffchainPolicyCurrent(
+        stored,
+        buildExpectedMessage,
+        verify,
+      );
+      return this.signTransactionStored(stored, digest, facts);
+    });
   }
 
   /**
@@ -1187,14 +1130,8 @@ export class SessionKeyManager {
     digest: `0x${string}`,
     facts: SessionKeyTransaction,
   ): Promise<`0x${string}`> {
-    return this.storage.withKeyLock(sessionId, () =>
-      this.withSessionLock(sessionId, async () => {
-        const stored = await this.readStoredSession(sessionId);
-        if (!stored) {
-          throw createSessionKeyError("session_key_not_found", sessionId);
-        }
-        return this.signTransactionStored(stored, digest, facts);
-      }),
+    return this.withStoredSession(sessionId, (stored) =>
+      this.signTransactionStored(stored, digest, facts),
     );
   }
 
@@ -1235,10 +1172,10 @@ export class SessionKeyManager {
     outerTx: { gas?: string },
     execution: FrameworkExecution,
   ): Promise<`0x${string}`> {
-    const snapshot = snapshotSessionTransaction(tx);
-    refuseEip7702Transaction(snapshot, REDEMPTION_EIP7702_REFUSAL);
-    const digest = transactionDigest(snapshot);
-    const facts = transactionFacts(snapshot);
+    const { digest, facts } = deriveSessionTransaction(
+      tx,
+      REDEMPTION_EIP7702_REFUSAL,
+    );
     if (outerTx.gas !== undefined && outerTx.gas !== facts.gas) {
       throw createSessionKeyError(
         "session_key_invalid_input",
@@ -1415,6 +1352,57 @@ export class SessionKeyManager {
       return await this.storage.get(sessionId);
     } catch (error) {
       throw createSessionKeyError("session_key_storage_unavailable", error);
+    }
+  }
+
+  /**
+   * Run `operation` on the stored record while holding the key lock and the
+   * session lock. A missing record is refused before `operation` runs.
+   */
+  private withStoredSession<T>(
+    sessionId: string,
+    operation: (stored: StoredSessionKey) => Promise<T>,
+  ): Promise<T> {
+    return this.storage.withKeyLock(sessionId, () =>
+      this.withSessionLock(sessionId, async () => {
+        const stored = await this.readStoredSession(sessionId);
+        if (!stored) {
+          throw createSessionKeyError("session_key_not_found", sessionId);
+        }
+        return operation(stored);
+      }),
+    );
+  }
+
+  /** Refuse a caller-supplied digest for the stored session; never signs. */
+  private refuseRawDigestFor(sessionId: string): Promise<never> {
+    return this.withStoredSession(sessionId, async (stored) =>
+      this.refuseRawDigest(stored),
+    );
+  }
+
+  /**
+   * Validate the session status, then refuse unless the stored off-chain
+   * policy still verifies against the message built from its current state.
+   */
+  private async assertStoredOffchainPolicyCurrent(
+    stored: StoredSessionKey,
+    buildExpectedMessage: (policy: SessionKeyInfo) => string,
+    verify: OffchainAuthorizationVerifier,
+  ): Promise<void> {
+    this.validateSessionStatus(stored);
+    const expectedMessage = buildExpectedMessage(this.toSessionKeyInfo(stored));
+    if (
+      !(await this.verifyStoredOffchainAuthorization(
+        stored,
+        expectedMessage,
+        verify,
+      ))
+    ) {
+      throw createSessionKeyError(
+        "session_key_invalid_input",
+        "Off-chain authorization no longer matches the signed policy",
+      );
     }
   }
 
