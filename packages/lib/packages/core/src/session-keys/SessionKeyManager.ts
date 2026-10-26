@@ -1135,7 +1135,7 @@ export class SessionKeyManager {
 
   /**
    * Sign a transaction with a session key, after revalidating the stored
-   * off-chain authorization. Same arguments and failure behaviour as
+   * off-chain authorization. Same arguments and failure behavior as
    * `signWithVerifiedOffchainAuthorization`, but the digest and the scope
    * facts are both derived from `tx`; no caller digest is accepted.
    */
