@@ -17,8 +17,15 @@
  *             registry), then checked: one copy of every @naculus/* package,
  *             all at the lockstep version, and the entry imports in Node.
  *
+ *   Registry - (--registry) no packing. Each entry is installed from npm at its
+ *             lockstep version (`name@version`, no overrides), with the same
+ *             consumer layout and checks. Also verifies that each registry
+ *             manifest's repository points at naculus-official/connect-suite
+ *             with this package's directory.
+ *
  *   node scripts/dependency-matrix.mjs            # static + dynamic
  *   node scripts/dependency-matrix.mjs --static   # static only
+ *   node scripts/dependency-matrix.mjs --registry # static + registry artifacts
  */
 import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
@@ -30,6 +37,8 @@ import semver from "semver";
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const GROUPS = ["packages/lib/packages", "packages/appkit/packages"];
 const STATIC_ONLY = process.argv.includes("--static");
+const REGISTRY = process.argv.includes("--registry");
+const REPOSITORY_URL = "https://github.com/naculus-official/connect-suite";
 
 function readJson(path) {
   return JSON.parse(readFileSync(path, "utf8"));
@@ -123,19 +132,49 @@ function scenarioEntries(pkgs) {
   return publishable(pkgs).map((p) => p.json.name);
 }
 
-function installScenario(entry, tarballs, workDir) {
+/** `tarballs` is null in registry mode: the entry is then installed as name@lockstep from npm, with no overrides. */
+function installScenario(entry, tarballs, workDir, lockstepVersion) {
   const consumer = join(workDir, entry.replace(/[@/]/g, "_"));
   mkdirSync(consumer, { recursive: true });
   // The entry is a direct dependency, so an override for it would conflict.
-  const overrides = Object.fromEntries(
-    [...tarballs].filter(([name]) => name !== entry).map(([name, file]) => [name, `file:${file}`]),
-  );
+  const overrides = tarballs
+    ? Object.fromEntries([...tarballs].filter(([name]) => name !== entry).map(([name, file]) => [name, `file:${file}`]))
+    : undefined;
   writeFileSync(
     join(consumer, "package.json"),
     JSON.stringify({ name: "consumer", private: true, type: "module", overrides }, null, 2),
   );
-  run("npm", ["install", "--no-audit", "--no-fund", "--loglevel=error", tarballs.get(entry)], { cwd: consumer, stdio: "pipe" });
+  const spec = tarballs ? tarballs.get(entry) : `${entry}@${lockstepVersion}`;
+  run("npm", ["install", "--no-audit", "--no-fund", "--loglevel=error", spec], { cwd: consumer, stdio: "pipe" });
   return consumer;
+}
+
+/** Registry mode: each entry's npm manifest must point back at this repo and this package's directory. */
+function repositoryCheck(pkgs, lockstep) {
+  const problems = [];
+  for (const pkg of publishable(pkgs)) {
+    const spec = `${pkg.json.name}@${lockstep.get(pkg.json.name)}`;
+    let out;
+    try {
+      out = run("npm", ["view", spec, "repository", "--json"], { stdio: "pipe" }).trim();
+    } catch (error) {
+      problems.push(`${spec}: npm view failed: ${String(error.stderr || error.message).trim().split("\n").slice(-1)[0]}`);
+      continue;
+    }
+    if (!out) {
+      problems.push(`${spec}: not on the registry (npm view returned nothing)`);
+      continue;
+    }
+    // npm view prints an array when the spec matches versions; a single version is one element.
+    const parsed = JSON.parse(out);
+    const repo = Array.isArray(parsed) ? parsed[0] : parsed;
+    const url = String(repo?.url ?? "").replace(/^git\+/, "").replace(/\.git$/, "").replace(/\/$/, "");
+    const directory = String(repo?.directory ?? "").replace(/\/$/, "");
+    const wantDir = pkg.dir.split("\\").join("/");
+    if (url !== REPOSITORY_URL) problems.push(`${spec}: repository.url is ${repo?.url ?? "missing"}, expected ${REPOSITORY_URL}`);
+    if (directory !== wantDir) problems.push(`${spec}: repository.directory is ${repo?.directory ?? "missing"}, expected ${wantDir}`);
+  }
+  return problems;
 }
 
 /** Every @naculus/* copy under node_modules, including nested duplicates. */
@@ -167,7 +206,7 @@ function dynamicCheck(pkgs, tarballs, lockstep) {
   for (const entry of scenarioEntries(pkgs)) {
     let consumer;
     try {
-      consumer = installScenario(entry, tarballs, workDir);
+      consumer = installScenario(entry, tarballs, workDir, lockstep.get(entry));
     } catch (error) {
       problems.push(`${entry}: install failed\n${String(error.stderr || error.message).split("\n").slice(-6).join("\n")}`);
       continue;
@@ -181,7 +220,11 @@ function dynamicCheck(pkgs, tarballs, lockstep) {
     }
     for (const [name, versionsSeen] of byName) {
       const expected = lockstep.get(name);
-      if (!expected) continue;
+      if (!expected) {
+        // Registry mode has no tarballs to excuse a copy that the workspace does not know.
+        if (!tarballs) problems.push(`${entry}: ${name} is not a workspace package`);
+        continue;
+      }
       if (versionsSeen.size > 1) problems.push(`${entry}: ${name} installed at several versions: ${[...versionsSeen].join(", ")}`);
       else if (!versionsSeen.has(expected)) problems.push(`${entry}: ${name} is ${[...versionsSeen][0]}, expected ${expected}`);
     }
@@ -209,6 +252,15 @@ if (staticProblems.length) fail(staticProblems);
 console.log(`  ✓ ${publishable(pkgs).length} publishable packages, all ranges match their lockstep target`);
 
 if (STATIC_ONLY) process.exit(0);
+
+if (REGISTRY) {
+  console.log("Registry: repository metadata, then install each entry from npm");
+  const registryProblems = repositoryCheck(pkgs, lockstep);
+  registryProblems.push(...dynamicCheck(pkgs, null, lockstep));
+  if (registryProblems.length) fail(registryProblems);
+  console.log(`  ✓ ${scenarioEntries(pkgs).length} entry packages installed from the registry, one lockstep copy each`);
+  process.exit(0);
+}
 
 console.log("Dynamic: pack, install alone, check, import");
 const outDir = mkdtempSync(join(tmpdir(), "connect-tarballs-"));
