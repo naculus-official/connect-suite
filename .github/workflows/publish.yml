@@ -104,10 +104,10 @@ jobs:
 
   publish-appkit:
     name: Publish appkit
-    needs: publish-lib
-    # Runs when asked for appkit alone (lib skipped) or after lib succeeded.
-    # `always()` keeps the job from being skipped just because lib was skipped.
-    if: ${{ always() && (inputs.group == 'appkit' || inputs.group == 'both') && (needs.publish-lib.result == 'success' || needs.publish-lib.result == 'skipped') }}
+    # No `needs`: this job starts at once so its approval is requested up front,
+    # letting both groups be reviewed in one sitting. Before publishing, it waits
+    # for the lib version to appear on npm (group both only).
+    if: ${{ inputs.group == 'appkit' || inputs.group == 'both' }}
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -142,6 +142,20 @@ jobs:
           VERSION=$(node -p "require('./packages/core/package.json').version")
           node scripts/release-notes.mjs "$VERSION" > "$RUNNER_TEMP/release-notes.md"
           cat "$RUNNER_TEMP/release-notes.md" >> "$GITHUB_STEP_SUMMARY"
+      - name: Wait for lib on npm (both, real publish)
+        if: ${{ inputs.group == 'both' && inputs.dry_run == 'false' }}
+        run: |
+          set -euo pipefail
+          VERSION=$(node -p "require('./packages/lib/packages/core/package.json').version")
+          for i in $(seq 1 120); do
+            if npm view "@naculus/connect-core@$VERSION" version >/dev/null 2>&1; then
+              echo "lib $VERSION is on npm"
+              exit 0
+            fi
+            sleep 15
+          done
+          echo "lib $VERSION did not appear on npm within 30 minutes; not publishing appkit"
+          exit 1
       - name: Release preflight (dry run - configuration only)
         if: ${{ inputs.dry_run == 'true' }}
         working-directory: packages/appkit
