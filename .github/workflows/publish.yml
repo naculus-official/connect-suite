@@ -127,8 +127,10 @@ jobs:
           registry-url: 'https://registry.npmjs.org'
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
-      - name: Build appkit
-        run: pnpm run build:appkit
+      # appkit typechecks against the lib build output (its workspace deps), so
+      # build the whole workspace, as ci.yml does, not only appkit.
+      - name: Build workspace
+        run: pnpm run build
       - name: Typecheck appkit
         run: pnpm --dir packages/appkit exec tsc --noEmit
       - name: Test appkit
