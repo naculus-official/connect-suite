@@ -25,6 +25,28 @@ function isGateSkipped(id: string): boolean {
   )
 }
 
+// wagmi is a required peer of @naculus/connector-wagmi and this consumer does
+// not install it. Node resolution walks up from the SDK tarball's real path, so
+// without this guard the wagmi import would be found in the SDK repo's root
+// node_modules (a root devDependency) and the missing-peer contract would be
+// silently tested as satisfied. When the gate's own node_modules lacks wagmi,
+// fail the import here, before the default resolver walks into ancestor
+// directories. The message keeps the diagnostic signals the gate attributes:
+// a failed resolution of "wagmi", the importing @naculus/connector-wagmi file,
+// and the required-peer cause.
+const gateWagmiInstalled = existsSync(resolve(testerRoot, 'node_modules/wagmi/package.json'))
+const gateOwnDependenciesOnly = {
+  name: 'gate-own-node-modules-only',
+  enforce: 'pre' as const,
+  resolveId(source: string, importer?: string) {
+    if (gateWagmiInstalled || !/^wagmi(\/|$)/.test(source)) return null
+    this.error(
+      `Could not resolve "${source}" imported by "${importer ?? 'unknown importer'}". ` +
+        'wagmi is a required peer of @naculus/connector-wagmi and this consumer does not install it.',
+    )
+  },
+}
+
 const config = defineConfig({
   root: import.meta.dirname,
   resolve: { tsconfigPaths: true },
@@ -48,6 +70,11 @@ const config = defineConfig({
           '@naculus/connect-appkit-ui',
           '@naculus/connect-appkit-vue',
           '@naculus/connect-appkit-wc',
+          // The dep optimizer resolves with its own esbuild resolver and would
+          // find wagmi in an ancestor node_modules, bypassing the guard plugin.
+          // Serving the connector unbundled routes its wagmi import through
+          // the dev server's resolver, which the guard plugin covers.
+          ...(gateWagmiInstalled ? [] : ['@naculus/connector-wagmi']),
         ]
       : [],
   },
@@ -58,7 +85,7 @@ const config = defineConfig({
   server: {
     fs: { allow: [resolve(testerRoot, '..', '..')] },
   },
-  plugins: [tailwindcss(), tanstackStart(), viteReact()],
+  plugins: [gateOwnDependenciesOnly, tailwindcss(), tanstackStart(), viteReact()],
 })
 
 export default config
