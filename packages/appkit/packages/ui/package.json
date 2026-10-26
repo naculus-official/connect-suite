@@ -1,6 +1,6 @@
 {
   "name": "@naculus/connect-appkit-ui",
-  "version": "0.14.2",
+  "version": "0.15.0",
   "type": "module",
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",
@@ -43,9 +43,9 @@
     "tailwind-merge": "^3.7.0"
   },
   "peerDependencies": {
-    "@naculus/connect-appkit-core": "^0.14.2",
-    "@naculus/connect-appkit-react": "^0.14.2",
-    "@naculus/connect-core": "^0.14.2",
+    "@naculus/connect-appkit-core": "^0.15.0",
+    "@naculus/connect-appkit-react": "^0.15.0",
+    "@naculus/connect-core": "^0.15.0",
     "react": "^18.0.0 || ^19.0.0",
     "react-dom": "^18.0.0 || ^19.0.0"
   },

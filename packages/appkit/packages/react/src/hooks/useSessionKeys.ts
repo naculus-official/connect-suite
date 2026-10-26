@@ -11,7 +11,6 @@ import type {
   SessionKeyInfo,
   SessionKeyManagerConfig,
   SessionKeyScope,
-  SessionKeyTransaction,
 } from "@naculus/connect-core";
 import { type SessionKeyManager, WalletError } from "@naculus/connect-core";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -272,12 +271,6 @@ export function useRevokeSession(
 // ─── useSendWithSession ────────────────────────────────────────────────
 
 export interface UseSendWithSessionReturn {
-  /** Sign a transaction hash after enforcing the transaction scope */
-  signWithSession: (
-    sessionId: string,
-    messageHash: `0x${string}`,
-    tx: SessionKeyTransaction,
-  ) => Promise<`0x${string}`>;
   /** Check if a transaction is within a session's scope */
   checkScope: (
     sessionId: string,
@@ -304,16 +297,13 @@ export interface UseSendWithSessionReturn {
 }
 
 /**
- * Hook to sign transactions using session keys and check scope.
+ * Hook to check a transaction against a session key's scope.
  *
  * @example
  * ```tsx
- * const { signWithSession, checkScope } = useSendWithSession();
+ * const { checkScope } = useSendWithSession();
  *
  * const check = await checkScope(sessionId, tx);
- * if (check.valid) {
- *   const sig = await signWithSession(sessionId, messageHash, tx);
- * }
  * ```
  */
 export function useSendWithSession(
@@ -325,30 +315,6 @@ export function useSendWithSession(
   const clearError = useCallback(() => setError(null), []);
 
   const manager = getSessionKeyManagerForHooks(config);
-
-  const signWithSession = useCallback(
-    async (
-      sessionId: string,
-      messageHash: `0x${string}`,
-      tx: SessionKeyTransaction,
-    ): Promise<`0x${string}`> => {
-      setIsBusy(true);
-      setError(null);
-      try {
-        return await manager.signWithSessionKey(sessionId, messageHash, tx);
-      } catch (err) {
-        const errorObj =
-          err instanceof Error
-            ? err
-            : new Error("Failed to sign with session key");
-        setError(errorObj);
-        throw errorObj;
-      } finally {
-        setIsBusy(false);
-      }
-    },
-    [manager],
-  );
 
   const checkScope = useCallback(
     async (
@@ -380,7 +346,6 @@ export function useSendWithSession(
   );
 
   return {
-    signWithSession,
     checkScope,
     isBusy,
     error,

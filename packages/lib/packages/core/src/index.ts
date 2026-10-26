@@ -59,6 +59,7 @@ export * from "./session";
 export * from "./settlement-verification";
 // ── Session Keys / Ephemeral Keys ────────────────────────────────────
 export * from "./session-keys";
+export type { TransactionRequest } from "./signing/types";
 export * from "./session-manager";
 // ── Transaction Simulation (SRS-010) ──────────────────────────────────
 export * from "./simulation";

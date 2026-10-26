@@ -1,6 +1,6 @@
 {
   "name": "@naculus/connect-appkit-core",
-  "version": "0.14.2",
+  "version": "0.15.0",
   "type": "module",
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",
@@ -22,7 +22,7 @@
     "typecheck": "tsc --noEmit"
   },
   "peerDependencies": {
-    "@naculus/connect-core": "^0.14.2"
+    "@naculus/connect-core": "^0.15.0"
   },
   "dependencies": {
     "@naculus/payments-x402": "workspace:^"

@@ -1,16 +1,16 @@
-import { WalletError } from "../errors";
-import { typedDataSigningHash } from "./eip712";
 import {
   assembleSignedTransaction,
   authorizationHash,
+  hexToBytes,
   signedAuthorization,
   snapshotAuthorization,
   snapshotTransaction,
   TransactionInputError,
   transactionSignature,
   transactionSigningHash,
-} from "./evm-tx";
-import { hexToBytes } from "./rlp";
+} from "@naculus/connect-core/signing";
+import { WalletError } from "../errors";
+import { typedDataSigningHash } from "./eip712";
 import { signDigest } from "./secp256k1-digest";
 import type {
   Eip7702AuthorizationOptions,

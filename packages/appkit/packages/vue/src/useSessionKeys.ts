@@ -21,7 +21,7 @@ import { useActionGuard } from "./internal/action-guard";
  * key generation, encryption at rest, scope enforcement, fail-closed signing
  * — is connect-core's; the shared instance and its config guard are
  * appkit-core's. These composables only add reactivity. Private key material
- * never reaches them: signWithSession returns a signature, not a key.
+ * never reaches them.
  */
 
 export interface SessionKeyComposableOptions {
@@ -184,11 +184,6 @@ export function useRevokeSession(
 // ─── useSendWithSession ──────────────────────────────────────────────
 
 export interface UseSendWithSessionReturn {
-  signWithSession: (
-    sessionId: string,
-    messageHash: `0x${string}`,
-    tx: SessionKeyTransaction,
-  ) => Promise<`0x${string}`>;
   checkScope: (
     sessionId: string,
     tx: SessionKeyTransaction,
@@ -205,11 +200,6 @@ export function useSendWithSession(
   const manager = resolveManager(config, options);
   const guard = useActionGuard();
   return {
-    signWithSession: (sessionId, messageHash, tx) =>
-      guard.run(
-        () => manager.signWithSessionKey(sessionId, messageHash, tx),
-        "Failed to sign with session key",
-      ),
     checkScope: (sessionId, tx) =>
       guard.run(
         () => manager.checkSessionScope(sessionId, tx),

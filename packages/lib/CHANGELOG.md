@@ -7,13 +7,30 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
-## 0.14.2 — 2026-10-26
+## 0.15.0 — 2026-10-26
 
-- First release published from the connect-suite monorepo. The package manifests now point at `naculus-official/connect-suite` (with `directory`), so npm links and provenance resolve to this repo.
+Breaking release for session keys. All connect-lib packages release in lockstep at 0.15.0. Unpublished 0.14.2 changes are folded into this release. Migration guide: [MIGRATION-0.15.md](docs/MIGRATION-0.15.md).
+
+### Breaking
+
+- **Raw-digest session key signing is refused for every key with rails** (`@naculus/connect-core`) — rails are required in 0.14+, so `signWithSessionKey`, `signWithVerifiedOffchainAuthorization` and `signDelegationRedemption` now refuse every session key, and `getSessionBundle` refuses to return the raw private key of a key with rails. Use the transaction-bound methods instead, which derive the digest from the transaction inside core: `signTransactionWithSessionKey`, `signTransactionWithVerifiedOffchainAuthorization` and `signTransactionDelegationRedemption`. Security: a key whose rails included only `transfer` could previously sign a caller-supplied raw digest that was not bound to the transaction the scope checked. That signature is now refused.
+- **Malformed transactions on the wallet send path fail with `session_key_invalid_input`** (`@naculus/wallet-engine`) — a transaction that cannot be hashed on the session-key send path now throws `WalletError` with code `session_key_invalid_input` instead of `invalid_input`. Code that matches `invalid_input` on this path must match `session_key_invalid_input`.
+
+### Added
+
+- **`./signing` subpath** (`@naculus/connect-core/signing`) — transaction signing hash, RLP helpers, transaction and EIP-7702 authorization types, and signed-transaction assembly. The wallet-engine crypto worker bundles only this entry.
+- **`TransactionRequest` type** is exported from the `@naculus/connect-core` root.
+- **Transaction-bound session key methods** on `SessionKeyManager`: `signTransactionWithSessionKey`, `signTransactionWithVerifiedOffchainAuthorization` and `signTransactionDelegationRedemption`. A plain transaction needs the `transfer` rail; an eip7702 key signs only delegation redemptions.
+
+### Dependencies
+
 - Workspace dependency overrides are pinned at the root: `zod` `^4.6.6` and transitive security fixes (axios, vite, undici, fast-uri, and others). See `AUDIT-EXCEPTIONS.md` for the one recorded advisory exception.
-- Lint and build configuration only: Biome schema aligned to 2.6.3; bigint-safe code paths are unchanged.
-- No public API changes.
-- All connect-lib packages release in lockstep at 0.14.2.
+- Lint and build configuration: Biome schema aligned to 2.6.3.
+- Packages are published from the connect-suite monorepo; package manifests point at `naculus-official/connect-suite` (with `directory`), so npm links and provenance resolve to this repo.
+
+### Version bump only
+
+- All other connect-lib packages.
 
 ## 0.14.0 — 2026-10-24
 

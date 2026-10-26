@@ -1,3 +1,21 @@
+import type {
+  Eip7702AuthorizationOptions as CoreEip7702AuthorizationOptions,
+  Eip7702AuthorizationRequest as CoreEip7702AuthorizationRequest,
+  SignedEip7702Authorization as CoreSignedEip7702Authorization,
+  TransactionRequest as CoreTransactionRequest,
+} from "@naculus/connect-core/signing";
+
+// The transaction and EIP-7702 request types are defined once in connect-core
+// (signing/types.ts). These local interfaces extend them so wallet-engine keeps
+// declaring the names itself, which keeps its published declarations unchanged.
+export interface TransactionRequest extends CoreTransactionRequest {}
+export interface Eip7702AuthorizationRequest
+  extends CoreEip7702AuthorizationRequest {}
+export interface SignedEip7702Authorization
+  extends CoreSignedEip7702Authorization {}
+export interface Eip7702AuthorizationOptions
+  extends CoreEip7702AuthorizationOptions {}
+
 export interface SignRequest {
   /** Raw message to sign (e.g., for personal_sign, the message string) */
   message: string;
@@ -12,62 +30,6 @@ export interface SignResult {
   signature: `0x${string}`;
   /** Optional recovery id */
   recovery?: number;
-}
-
-export interface TransactionRequest {
-  to: string;
-  from?: string;
-  value?: string;
-  data?: string;
-  gas?: string;
-  nonce?: string;
-  chainId?: number;
-
-  // Legacy fee field
-  gasPrice?: string;
-
-  // EIP-1559 fee fields
-  maxFeePerGas?: string;
-  maxPriorityFeePerGas?: string;
-
-  // Explicit type hint (optional, auto-detected if omitted). "eip7702" is
-  // never auto-detected: a type-4 transaction must say so.
-  type?: "legacy" | "eip1559" | "eip7702";
-
-  /** EIP-7702 only: owner-signed delegations carried by a type-4 transaction. */
-  authorizationList?: SignedEip7702Authorization[];
-}
-
-/**
- * An EIP-7702 authorization before it is signed: "set the code of the signing
- * EOA to delegate to `address`, on `chainId`, at the EOA's nonce `nonce`".
- * `address` 0x000…0 clears an existing delegation.
- */
-export interface Eip7702AuthorizationRequest {
-  /** Decimal EIP-155 chain ID. 0 means "any chain" and is refused by default. */
-  chainId: number;
-  /** 20-byte delegate (implementation) address. */
-  address: string;
-  /** The authority's account nonce, as a canonical hex quantity. */
-  nonce: string;
-}
-
-export interface SignedEip7702Authorization
-  extends Eip7702AuthorizationRequest {
-  yParity: 0 | 1;
-  /** 32-byte hex. */
-  r: `0x${string}`;
-  /** 32-byte hex. */
-  s: `0x${string}`;
-}
-
-export interface Eip7702AuthorizationOptions {
-  /**
-   * Allow `chainId: 0`, an authorization that is valid on every chain. One
-   * signature then delegates the account everywhere it exists, so this is off
-   * by default and deliberately named to stand out in review.
-   */
-  unsafeAllowAnyChainAuthorization?: boolean;
 }
 
 export interface TransactionResult {

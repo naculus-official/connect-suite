@@ -9,6 +9,7 @@ import {
   type PolicyExecutionPreview,
   type PolicyExecutionSubmission,
   type PolicySignatureVerifier,
+  type PreparedPolicyExecution,
 } from "@naculus/connect-appkit-core";
 import type {
   AtomicityRequirement,
@@ -89,10 +90,16 @@ export interface UseDelegationPolicyReturn {
     callCount?: number,
     atomicity?: AtomicityRequirement,
   ) => Promise<DelegationPolicyPreview>;
+  /**
+   * Sign one prepared execution after enforcing the persisted policy. The
+   * digest is checked against `prepared.request` before signing.
+   *
+   * Breaking change: the input is now the `PreparedPolicyExecution` (with its
+   * `request`) instead of a bare `digest` and `tx`.
+   */
   signPolicyDigest: (
     policyId: string,
-    digest: `0x${string}`,
-    tx: SessionKeyTransaction,
+    prepared: PreparedPolicyExecution,
   ) => Promise<`0x${string}`>;
   executePolicy: (
     policyId: string,

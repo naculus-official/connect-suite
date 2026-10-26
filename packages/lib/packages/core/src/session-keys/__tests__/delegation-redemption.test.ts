@@ -1,6 +1,7 @@
 import { secp256k1 } from "@noble/curves/secp256k1.js";
 import { bytesToHex, hexToBytes } from "@noble/hashes/utils.js";
 import { describe, expect, it } from "vitest";
+import type { TransactionRequest } from "../../signing";
 import { MemoryStorageAdapter } from "../../storage";
 import {
   DELEGATION_FRAMEWORK,
@@ -51,6 +52,26 @@ function transfer(to: string, amount: bigint): FrameworkExecution {
     target: USDC,
     value: 0n,
     callData: `0xa9059cbb${to.slice(2).padStart(64, "0")}${amount.toString(16).padStart(64, "0")}`,
+  };
+}
+
+/** The redemption transaction a built call describes, as the wallet sends it. */
+function redemptionTx(call: {
+  to: string;
+  value: string;
+  chainId: number;
+  data: string;
+}): TransactionRequest {
+  return {
+    to: call.to,
+    value: call.value,
+    data: call.data,
+    chainId: call.chainId,
+    nonce: "0x0",
+    gas: "0x30d40",
+    maxFeePerGas: "0x3b9aca00",
+    maxPriorityFeePerGas: "0x3b9aca00",
+    type: "eip1559",
   };
 }
 
@@ -174,15 +195,20 @@ describe("eip7702 session keys: redemption", () => {
     const first = transfer(PAYEE, 600n);
     const call = await manager.buildDelegationRedemption(info.id, first);
     await expect(
-      manager.signDelegationRedemption(info.id, DIGEST, call, first),
+      manager.signTransactionDelegationRedemption(
+        info.id,
+        redemptionTx(call),
+        {},
+        first,
+      ),
     ).resolves.toMatch(/^0x[0-9a-f]{130}$/);
     // 600 + 600 exceeds the 1000 allowance, checked before signing.
     const second = transfer(PAYEE, 600n);
     await expect(
-      manager.signDelegationRedemption(
+      manager.signTransactionDelegationRedemption(
         info.id,
-        DIGEST,
-        await manager.buildDelegationRedemption(info.id, second),
+        redemptionTx(await manager.buildDelegationRedemption(info.id, second)),
+        {},
         second,
       ),
     ).rejects.toMatchObject({ code: "session_key_scope_exceeded" });
@@ -203,7 +229,12 @@ describe("eip7702 session keys: redemption", () => {
       { ...call, data: other.data },
     ]) {
       await expect(
-        manager.signDelegationRedemption(info.id, DIGEST, outer, execution),
+        manager.signTransactionDelegationRedemption(
+          info.id,
+          redemptionTx(outer),
+          {},
+          execution,
+        ),
       ).rejects.toMatchObject({ code: "session_key_scope_exceeded" });
     }
   });
@@ -213,18 +244,33 @@ describe("eip7702 session keys: redemption", () => {
     const execution = transfer(OTHER, 1n);
     const call = await manager.buildDelegationRedemption(info.id, execution);
     await expect(
-      manager.signDelegationRedemption(info.id, DIGEST, call, execution),
+      manager.signTransactionDelegationRedemption(
+        info.id,
+        redemptionTx(call),
+        {},
+        execution,
+      ),
     ).rejects.toMatchObject({ code: "session_key_scope_exceeded" });
   });
 
   it("signs nothing else with an eip7702 key", async () => {
     const { manager, info } = await delegatedKey();
+    // The raw-digest redemption method is refused for every rails key, even
+    // for the redemption itself; only the bound method signs redemptions.
+    const execution = transfer(PAYEE, 1n);
+    const call = await manager.buildDelegationRedemption(info.id, execution);
+    await expect(
+      manager.signDelegationRedemption(info.id, DIGEST, call, execution),
+    ).rejects.toMatchObject({ code: "session_key_scope_exceeded" });
     await expect(
       manager.signWithSessionKey(info.id, DIGEST, { to: USDC }),
     ).rejects.toMatchObject({ code: "session_key_scope_exceeded" });
     await expect(manager.getSessionBundle(info.id)).rejects.toMatchObject({
       code: "session_key_scope_exceeded",
     });
+    await expect(
+      manager.signTransactionWithSessionKey(info.id, redemptionTx(call)),
+    ).rejects.toMatchObject({ code: "session_key_scope_exceeded" });
   });
 
   it("refuses other signing for an eip7702 key even without a recipient limit", async () => {
@@ -260,23 +306,27 @@ describe("eip7702 session keys: redemption", () => {
       details: expect.stringMatching(/only delegation redemptions/),
     });
     await expect(
-      manager.signTypedDataWithSessionKey(info.id, {
-        domain: {
-          name: "USD Coin",
-          version: "2",
-          chainId: 8453,
-          verifyingContract: USDC,
+      manager.signTypedDataWithSessionKey(
+        info.id,
+        {
+          domain: {
+            name: "USD Coin",
+            version: "2",
+            chainId: 8453,
+            verifyingContract: USDC,
+          },
+          primaryType: "TransferWithAuthorization",
+          message: {
+            from: sessionKeyAddress(info.publicKey),
+            to: PAYEE,
+            value: "1",
+            validAfter: "0",
+            validBefore: String(Math.floor(Date.now() / 1000) + 600),
+            nonce: `0x${"ab".repeat(32)}`,
+          },
         },
-        primaryType: "TransferWithAuthorization",
-        message: {
-          from: sessionKeyAddress(info.publicKey),
-          to: PAYEE,
-          value: "1",
-          validAfter: "0",
-          validBefore: String(Math.floor(Date.now() / 1000) + 600),
-          nonce: `0x${"ab".repeat(32)}`,
-        },
-      }, "x402-exact"),
+        "x402-exact",
+      ),
     ).rejects.toMatchObject({
       details: expect.stringMatching(/only delegation redemptions/),
     });

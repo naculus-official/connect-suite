@@ -1,4 +1,9 @@
-import { MemoryStorageAdapter, SessionKeyManager } from "@naculus/connect-core";
+import {
+  MemoryStorageAdapter,
+  SessionKeyManager,
+  type TransactionRequest,
+} from "@naculus/connect-core";
+import { transactionSigningHash } from "@naculus/connect-core/signing";
 import { describe, expect, it, vi } from "vitest";
 import {
   buildDelegationPolicyMessage,
@@ -196,7 +201,18 @@ describe("createDelegationPolicyFlow", () => {
       })),
       prepare: vi.fn(
         async ({ transaction }: { transaction: { to?: string } }) => ({
-          digest: `0x${"ab".repeat(32)}` as const,
+          digest:
+            "0xe649ddb4be4b513157aa3bb9d3e04888de1417953c42ed4080b4035c6a08b106" as const,
+          request: {
+            type: "eip1559" as const,
+            chainId: 11155111,
+            nonce: "0x0",
+            gas: "0x5208",
+            maxFeePerGas: "0x3b9aca00",
+            maxPriorityFeePerGas: "0x1",
+            to: SIGNER,
+            value: "0x0",
+          },
           transaction: { ...transaction, to: SIGNER }, // adapter swaps the target
           payload: null,
         }),
@@ -213,5 +229,93 @@ describe("createDelegationPolicyFlow", () => {
       flow.executePolicy(policy.id, { to: CONTRACT }),
     ).rejects.toThrow(/changed the requested target/);
     expect(adapter.broadcast).not.toHaveBeenCalled();
+  });
+
+  it("refuses a prepared digest that is not the signing hash of its request, before signing", async () => {
+    const { deps: d, manager } = deps();
+    const flow = createDelegationPolicyFlow(d);
+    const policy = await flow.createPolicy({
+      allowedContracts: [CONTRACT],
+      rails: ["transfer", "x402-exact", "mpp-charge"],
+    });
+    const signSpy = vi.spyOn(
+      manager,
+      "signTransactionWithVerifiedOffchainAuthorization",
+    );
+    const request: TransactionRequest = {
+      type: "eip1559",
+      chainId: 11155111,
+      nonce: "0x0",
+      gas: "0x5208",
+      maxFeePerGas: "0x3b9aca00",
+      maxPriorityFeePerGas: "0x1",
+      to: CONTRACT,
+      value: "0x0",
+      data: "0x",
+    };
+    const prepared = {
+      digest: `0x${"ab".repeat(32)}` as `0x${string}`,
+      request,
+      transaction: {
+        to: CONTRACT,
+        value: "0x0",
+        data: "0x",
+        chainId: 11155111,
+      },
+      payload: null,
+    };
+    await expect(flow.signPolicyDigest(policy.id, prepared)).rejects.toThrow(
+      /does not match the signing hash/,
+    );
+    await expect(
+      flow.signPolicyDigest(policy.id, prepared),
+    ).rejects.toMatchObject({ code: "invalid_input" });
+    expect(signSpy).not.toHaveBeenCalled();
+  });
+
+  it("refuses a prepared request whose target differs from the checked transaction, before signing", async () => {
+    const { deps: d, manager } = deps();
+    const flow = createDelegationPolicyFlow(d);
+    const policy = await flow.createPolicy({
+      allowedContracts: [CONTRACT],
+      rails: ["transfer", "x402-exact", "mpp-charge"],
+    });
+    const signSpy = vi.spyOn(
+      manager,
+      "signTransactionWithVerifiedOffchainAuthorization",
+    );
+    // The digest matches this request, so only the intent guard can refuse.
+    const request: TransactionRequest = {
+      type: "eip1559",
+      chainId: 11155111,
+      nonce: "0x0",
+      gas: "0x5208",
+      maxFeePerGas: "0x3b9aca00",
+      maxPriorityFeePerGas: "0x1",
+      to: SIGNER,
+      value: "0x0",
+      data: "0x",
+    };
+    const digest = `0x${Array.from(transactionSigningHash(request), (byte) =>
+      byte.toString(16).padStart(2, "0"),
+    ).join("")}` as `0x${string}`;
+    const prepared = {
+      digest,
+      request,
+      transaction: {
+        to: CONTRACT,
+        value: "0x0",
+        data: "0x",
+        chainId: 11155111,
+      },
+      payload: null,
+    };
+    await expect(flow.signPolicyDigest(policy.id, prepared)).rejects.toThrow(
+      /differs from the prepared transaction/,
+    );
+    await expect(
+      flow.signPolicyDigest(policy.id, prepared),
+    ).rejects.toMatchObject({ code: "invalid_input" });
+    expect(signSpy).not.toHaveBeenCalled();
   });
 });

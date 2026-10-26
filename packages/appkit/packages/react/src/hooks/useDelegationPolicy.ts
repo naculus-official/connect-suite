@@ -80,13 +80,16 @@ export interface UseDelegationPolicyReturn {
     atomicity?: AtomicityRequirement,
   ) => Promise<DelegationPolicyPreview>;
   /**
-   * Sign one 32-byte execution digest after enforcing the persisted policy.
-   * This returns a signature only; an AA/7702 adapter must still broadcast it.
+   * Sign one prepared execution after enforcing the persisted policy. The
+   * digest is checked against `prepared.request` before signing. This returns
+   * a signature only; an AA/7702 adapter must still broadcast it.
+   *
+   * Breaking change: the input is now the `PreparedPolicyExecution` (with its
+   * `request`) instead of a bare `digest` and `tx`.
    */
   signPolicyDigest: (
     policyId: string,
-    digest: `0x${string}`,
-    tx: SessionKeyTransaction,
+    prepared: PreparedPolicyExecution,
   ) => Promise<`0x${string}`>;
   /** Prepare, policy-check, session-sign, and submit one exact operation. */
   executePolicy: (

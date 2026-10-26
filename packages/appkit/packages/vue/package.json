@@ -1,6 +1,6 @@
 {
   "name": "@naculus/connect-appkit-vue",
-  "version": "0.14.2",
+  "version": "0.15.0",
   "type": "module",
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",
@@ -26,8 +26,8 @@
     "@stencil/vue-output-target": "^0.14.6"
   },
   "peerDependencies": {
-    "@naculus/connect-appkit-core": "^0.14.2",
-    "@naculus/connect-core": "^0.14.2",
+    "@naculus/connect-appkit-core": "^0.15.0",
+    "@naculus/connect-core": "^0.15.0",
     "vue": "^3.5.0"
   },
   "publishConfig": {

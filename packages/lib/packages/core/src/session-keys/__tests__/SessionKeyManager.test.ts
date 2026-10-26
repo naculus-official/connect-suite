@@ -1,6 +1,7 @@
 import { sha256 } from "@noble/hashes/sha2.js";
 import { bytesToHex } from "@noble/hashes/utils.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { TransactionRequest } from "../../signing";
 import { MemoryStorageAdapter } from "../../storage";
 import { SessionKeyManager } from "../SessionKeyManager";
 import { decryptPrivateKey, SessionKeyStorage } from "../storage";
@@ -96,6 +97,24 @@ function erc20TransferFrom(amount: bigint) {
     ...testTx,
     value: "0x0",
     data: `0x23b872dd${"0".repeat(24)}${"22".repeat(20)}${"0".repeat(24)}${"11".repeat(20)}${amount.toString(16).padStart(64, "0")}`,
+  };
+}
+
+/**
+ * A full transaction carrying the given scope facts. The bound signing path
+ * derives the digest from this transaction and checks the scope on the same
+ * facts.
+ */
+function boundTx(
+  facts: Pick<TransactionRequest, "to" | "value" | "data" | "chainId">,
+): TransactionRequest {
+  return {
+    ...facts,
+    nonce: "0x1",
+    gas: "0x186a0",
+    maxFeePerGas: "0x3b9aca00",
+    maxPriorityFeePerGas: "0x3b9aca00",
+    type: "eip1559",
   };
 }
 
@@ -344,12 +363,8 @@ describe("SessionKeyManager", () => {
       await manager.revokeSession(info.id);
 
       await expect(
-        manager.signWithSessionKey(
-          info.id,
-          ("0x" + "ab".repeat(32)) as `0x${string}`,
-          testTx,
-        ),
-      ).rejects.toThrow();
+        manager.signTransactionWithSessionKey(info.id, boundTx(testTx)),
+      ).rejects.toMatchObject({ code: "session_key_revoked" });
     });
 
     it("should observe revocation performed by another manager", async () => {
@@ -394,7 +409,11 @@ describe("SessionKeyManager", () => {
           "rails must list distinct values from transfer, x402-exact, mpp-charge",
         );
         await expect(
-          scopedManager.signWithSessionKey(info.id, `0x${"ab".repeat(32)}`, testTx),
+          scopedManager.signWithSessionKey(
+            info.id,
+            `0x${"ab".repeat(32)}`,
+            testTx,
+          ),
         ).rejects.toMatchObject({ code: "session_key_scope_exceeded" });
         await scopedManager.clearAll();
       },
@@ -648,13 +667,11 @@ describe("SessionKeyManager", () => {
   describe("signWithSessionKey", () => {
     it("should produce a valid secp256k1 signature", async () => {
       const info = await manager.createSessionKey(makeScope(), signerAddress);
-      const messageHash = ("0x" + "ab".repeat(32)) as `0x${string}`;
       await authorize(manager, info.id);
 
-      const signature = await manager.signWithSessionKey(
+      const signature = await manager.signTransactionWithSessionKey(
         info.id,
-        messageHash,
-        testTx,
+        boundTx(testTx),
       );
       expect(signature).toMatch(/^0x[a-f0-9]{130}$/i); // 65 bytes (r=32, s=32, v=1)
     });
@@ -663,7 +680,7 @@ describe("SessionKeyManager", () => {
       const info = await manager.createSessionKey(makeScope(), signerAddress);
 
       await expect(
-        manager.signWithSessionKey(info.id, `0x${"ab".repeat(32)}`, testTx),
+        manager.signTransactionWithSessionKey(info.id, boundTx(testTx)),
       ).rejects.toMatchObject({ code: "session_key_invalid_input" });
       expect(
         (await manager.listSessions()).find((item) => item.id === info.id)
@@ -681,11 +698,7 @@ describe("SessionKeyManager", () => {
       );
 
       await expect(
-        unsafeManager.signWithSessionKey(
-          info.id,
-          `0x${"ab".repeat(32)}`,
-          testTx,
-        ),
+        unsafeManager.signTransactionWithSessionKey(info.id, boundTx(testTx)),
       ).resolves.toMatch(/^0x[a-f0-9]{130}$/i);
       await unsafeManager.clearAll();
     });
@@ -698,24 +711,24 @@ describe("SessionKeyManager", () => {
         }),
         signerAddress,
       );
-      const messageHash = `0x${"ab".repeat(32)}` as `0x${string}`;
       await authorize(manager, info.id);
 
       await expect(
-        manager.signWithSessionKey(info.id, messageHash, erc20Transfer(60n)),
+        manager.signTransactionWithSessionKey(
+          info.id,
+          boundTx(erc20Transfer(60n)),
+        ),
       ).resolves.toMatch(/^0x[a-f0-9]{130}$/i);
       await expect(
-        manager.signWithSessionKey(
+        manager.signTransactionWithSessionKey(
           info.id,
-          messageHash,
-          erc20TransferFrom(41n),
+          boundTx(erc20TransferFrom(41n)),
         ),
       ).rejects.toMatchObject({ code: "session_key_scope_exceeded" });
       await expect(
-        manager.signWithSessionKey(
+        manager.signTransactionWithSessionKey(
           info.id,
-          messageHash,
-          erc20TransferFrom(40n),
+          boundTx(erc20TransferFrom(40n)),
         ),
       ).resolves.toMatch(/^0x[a-f0-9]{130}$/i);
 
@@ -742,12 +755,17 @@ describe("SessionKeyManager", () => {
         makeScope({ tokenAllowances: { [tokenAddress]: 100n } }),
         signerAddress,
       );
-      const messageHash = `0x${"ab".repeat(32)}` as `0x${string}`;
       await authorize(first, info.id);
 
       const results = await Promise.allSettled([
-        first.signWithSessionKey(info.id, messageHash, erc20Transfer(60n)),
-        second.signWithSessionKey(info.id, messageHash, erc20Transfer(60n)),
+        first.signTransactionWithSessionKey(
+          info.id,
+          boundTx(erc20Transfer(60n)),
+        ),
+        second.signTransactionWithSessionKey(
+          info.id,
+          boundTx(erc20Transfer(60n)),
+        ),
       ]);
 
       expect(
@@ -764,7 +782,6 @@ describe("SessionKeyManager", () => {
       const first = createManagerWithAdapter(adapter);
       const second = createManagerWithAdapter(adapter);
       const info = await first.createSessionKey(makeScope(), signerAddress);
-      const messageHash = `0x${"ab".repeat(32)}` as `0x${string}`;
       await authorize(first, info.id);
 
       const incrementUsageUnlocked =
@@ -783,7 +800,7 @@ describe("SessionKeyManager", () => {
       });
 
       await expect(
-        first.signWithSessionKey(info.id, messageHash, testTx),
+        first.signTransactionWithSessionKey(info.id, boundTx(testTx)),
       ).rejects.toMatchObject({ code: "session_key_not_found" });
       expect(await first.listSessions()).toEqual([]);
     });
@@ -798,12 +815,11 @@ describe("SessionKeyManager", () => {
         makeScope({ maxTxCount: 1 }),
         signerAddress,
       );
-      const hash = ("0x" + "ab".repeat(32)) as `0x${string}`;
       await authorize(first, info.id);
 
       const results = await Promise.allSettled([
-        first.signWithSessionKey(info.id, hash, testTx),
-        second.signWithSessionKey(info.id, hash, testTx),
+        first.signTransactionWithSessionKey(info.id, boundTx(testTx)),
+        second.signTransactionWithSessionKey(info.id, boundTx(testTx)),
       ]);
 
       expect(
@@ -817,10 +833,9 @@ describe("SessionKeyManager", () => {
 
     it("should throw for non-existent session key", async () => {
       await expect(
-        manager.signWithSessionKey(
+        manager.signTransactionWithSessionKey(
           "nonexistent-id",
-          ("0x" + "ab".repeat(32)) as `0x${string}`,
-          testTx,
+          boundTx(testTx),
         ),
       ).rejects.toThrow();
     });
@@ -836,12 +851,11 @@ describe("SessionKeyManager", () => {
         vi.advanceTimersByTime(120_000);
 
         await expect(
-          expiredManager.signWithSessionKey(
+          expiredManager.signTransactionWithSessionKey(
             info.id,
-            ("0x" + "ab".repeat(32)) as `0x${string}`,
-            testTx,
+            boundTx(testTx),
           ),
-        ).rejects.toThrow();
+        ).rejects.toMatchObject({ code: "session_key_expired" });
       } finally {
         vi.useRealTimers();
       }
@@ -971,6 +985,8 @@ describe("SessionKeyManager", () => {
         message,
       });
 
+      // Revalidation still runs under the lock, then the caller-supplied
+      // digest is refused: a raw digest cannot be bound to testTx.
       const verify = vi.fn().mockResolvedValue(true);
       await expect(
         manager.signWithVerifiedOffchainAuthorization(
@@ -980,12 +996,12 @@ describe("SessionKeyManager", () => {
           hash,
           testTx,
         ),
-      ).resolves.toMatch(/^0x[a-f0-9]{130}$/i);
+      ).rejects.toMatchObject({ code: "session_key_scope_exceeded" });
       expect(verify).toHaveBeenCalledOnce();
       expect(
         (await manager.listSessions()).find((item) => item.id === info.id)
           ?.useCount,
-      ).toBe(1);
+      ).toBe(0);
     });
 
     it("does not sign or consume budget when locked authorization verification fails", async () => {
@@ -1026,8 +1042,10 @@ describe("SessionKeyManager", () => {
       expect(scopeCheck.valid).toBe(true);
 
       // Sign
-      const hash = ("0x" + "cd".repeat(32)) as `0x${string}`;
-      const sig = await manager.signWithSessionKey(info.id, hash, testTx);
+      const sig = await manager.signTransactionWithSessionKey(
+        info.id,
+        boundTx(testTx),
+      );
       expect(sig).toBeTruthy();
 
       // Revoke
@@ -1060,24 +1078,21 @@ describe("SessionKeyManager periodic usage", () => {
       signerAddress,
     );
     await authorize(manager, info.id);
-    await manager.signWithSessionKey(
+    await manager.signTransactionWithSessionKey(
       info.id,
-      `0x${"01".repeat(32)}`,
-      erc20Transfer(60n),
+      boundTx(erc20Transfer(60n)),
     );
     await expect(
-      manager.signWithSessionKey(
+      manager.signTransactionWithSessionKey(
         info.id,
-        `0x${"02".repeat(32)}`,
-        erc20Transfer(41n),
+        boundTx(erc20Transfer(41n)),
       ),
     ).rejects.toMatchObject({ code: "session_key_scope_exceeded" });
     vi.setSystemTime(new Date((start + 10) * 1_000));
     await expect(
-      manager.signWithSessionKey(
+      manager.signTransactionWithSessionKey(
         info.id,
-        `0x${"03".repeat(32)}`,
-        erc20Transfer(60n),
+        boundTx(erc20Transfer(60n)),
       ),
     ).resolves.toMatch(/^0x/);
     vi.useRealTimers();
@@ -1089,10 +1104,9 @@ describe("SessionKeyManager periodic usage", () => {
     const legacy = await manager.createSessionKey(makeScope(), signerAddress);
     await authorize(manager, legacy.id);
     await expect(
-      manager.signWithSessionKey(
+      manager.signTransactionWithSessionKey(
         legacy.id,
-        `0x${"04".repeat(32)}`,
-        erc20Transfer(1n),
+        boundTx(erc20Transfer(1n)),
       ),
     ).resolves.toMatch(/^0x/);
 
@@ -1120,10 +1134,9 @@ describe("SessionKeyManager periodic usage", () => {
     };
     await adapter.set("session_keys", JSON.stringify(records) as never);
     await expect(
-      manager.signWithSessionKey(
+      manager.signTransactionWithSessionKey(
         periodic.id,
-        `0x${"05".repeat(32)}`,
-        erc20Transfer(1n),
+        boundTx(erc20Transfer(1n)),
       ),
     ).rejects.toMatchObject({ code: "session_key_scope_exceeded" });
   });

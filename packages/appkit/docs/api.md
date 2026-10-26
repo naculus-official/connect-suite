@@ -270,7 +270,7 @@ Install: `pnpm add @naculus/connect-appkit-react`
 | `useSessionKeys` | List and manage session keys. |
 | `useCreateSessionKey` | Create a session key. |
 | `useRevokeSession` | Revoke a session key. |
-| `useSendWithSession` | Sign with a session key and check its scope. |
+| `useSendWithSession` | Check a transaction against a session key's scope. |
 | `resetSessionKeyManager` | Reset the global session-key manager (tests, cleanup). |
 | `useSolanaSessionKey` | Solana session keys that pay x402 / MPP without a prompt. |
 | `useDelegate` | EIP-7702: delegate or revoke the connected embedded account via a type-4 transaction. |
@@ -384,7 +384,7 @@ Composables mirror the React hooks of the same name (same appkit-core logic, Vue
 | `useSessionKeys` | List and manage session keys. |
 | `useCreateSessionKey` | Create a session key. |
 | `useRevokeSession` | Revoke a session key. |
-| `useSendWithSession` | Sign with a session key and check its scope. |
+| `useSendWithSession` | Check a transaction against a session key's scope. |
 | `useSolanaSessionKey` | Solana session keys that pay x402 / MPP without a prompt. |
 | `useDelegate` | EIP-7702 delegate / revoke. |
 | `useDelegation` | Whether the connected EOA delegates to contract code. |

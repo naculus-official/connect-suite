@@ -1,8 +1,8 @@
 # @naculus/connect-appkit-ui
 
-## 0.14.2 — 2026-10-26
+## 0.15.0 — 2026-10-26
 
-- First release from the connect-suite monorepo. Version bump only: connect-lib dependency range moves to `^0.14.2`.
+- Version bump only: connect-lib dependency range moves to `^0.15.0`.
 
 ## 0.14.1 — 2026-10-25
 

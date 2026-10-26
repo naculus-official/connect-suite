@@ -2,7 +2,13 @@ import { defineConfig } from "tsup";
 
 export default defineConfig({
   // cctp is a separate entry so apps that do not bridge never load it.
-  entry: { index: "src/index.ts", cctp: "src/routes/providers/CctpBridgeProvider.ts" },
+  entry: {
+    index: "src/index.ts",
+    cctp: "src/routes/providers/CctpBridgeProvider.ts",
+    // Signing primitives only: the wallet-engine crypto worker bundles this
+    // entry and must not pull in the rest of core.
+    signing: "src/signing/index.ts",
+  },
   format: ["esm", "cjs"],
   dts: true,
   splitting: false,

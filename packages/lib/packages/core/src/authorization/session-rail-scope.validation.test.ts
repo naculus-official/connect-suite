@@ -8,6 +8,7 @@ import {
   type SessionKeyTypedDataRequest,
   sessionKeyAddress,
 } from "../session-keys/typed-data";
+import { DELEGATION_FRAMEWORK } from "../session-keys/delegation-framework";
 import type { SessionKeyScope } from "../session-keys/types";
 import { MemoryStorageAdapter } from "../storage";
 import {
@@ -226,8 +227,9 @@ describe("session rail scope validation", () => {
     );
     const refusal = {
       code: "session_key_scope_exceeded",
-      details:
-        "This session key limits rails; a raw digest cannot be bound to a rail. Use signTypedDataWithSessionKey.",
+      details: expect.stringContaining(
+        "A raw digest cannot be bound to the transaction it signs",
+      ),
     };
     await expect(manager.getSessionBundle(info.id)).rejects.toMatchObject(
       refusal,
@@ -254,11 +256,22 @@ describe("session rail scope validation", () => {
       details:
         "Cannot express this scope as an EIP-7702 delegation: rails does not include transfer",
     });
+    // The bound redemption path keeps its own rail check.
     await expect(
-      manager.signDelegationRedemption(
+      manager.signTransactionDelegationRedemption(
         info.id,
-        `0x${"11".repeat(32)}`,
-        { chainId: 1, value: "0", data: "0x" },
+        {
+          to: DELEGATION_FRAMEWORK.delegationManager,
+          value: "0x0",
+          data: "0x",
+          chainId: 1,
+          nonce: "0x0",
+          gas: "0x30d40",
+          maxFeePerGas: "0x3b9aca00",
+          maxPriorityFeePerGas: "0x3b9aca00",
+          type: "eip1559",
+        },
+        {},
         { target: TOKEN, value: 0n, callData: "0x" },
       ),
     ).rejects.toMatchObject({
@@ -266,6 +279,15 @@ describe("session rail scope validation", () => {
       details:
         "A delegation redemption needs the transfer rail in the session scope",
     });
+    // The raw-digest redemption method is refused outright.
+    await expect(
+      manager.signDelegationRedemption(
+        info.id,
+        `0x${"11".repeat(32)}`,
+        { chainId: 1, value: "0", data: "0x" },
+        { target: TOKEN, value: 0n, callData: "0x" },
+      ),
+    ).rejects.toMatchObject({ code: "session_key_scope_exceeded" });
   });
 
   it("rejects an empty, duplicated or unknown rails list", async () => {

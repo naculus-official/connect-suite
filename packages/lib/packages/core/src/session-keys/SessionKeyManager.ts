@@ -19,6 +19,12 @@ import { secp256k1 } from "@noble/curves/secp256k1.js";
 import { sha256 } from "@noble/hashes/sha2.js";
 import { bytesToHex, hexToBytes, randomBytes } from "@noble/hashes/utils.js";
 import { isValidAddress, isZeroAddress } from "../address-validation";
+import {
+  snapshotTransaction,
+  TransactionInputError,
+  type TransactionRequest,
+  transactionSigningHash,
+} from "../signing";
 import type { StorageAdapter } from "../storage";
 import {
   buildDelegation,
@@ -189,6 +195,71 @@ function decodeScopedTokenSpend(
       allowance,
       recipient: `0x${data.slice(recipientStart + 24, recipientStart + 64)}`,
     },
+  };
+}
+
+/**
+ * The digest a transaction is signed under, as 0x-hex. Invalid input is
+ * refused as session_key_invalid_input, not passed through.
+ */
+function transactionDigest(tx: TransactionRequest): `0x${string}` {
+  try {
+    return `0x${bytesToHex(transactionSigningHash(tx))}`;
+  } catch (err) {
+    if (err instanceof TransactionInputError) {
+      throw createSessionKeyError("session_key_invalid_input", err.message);
+    }
+    throw err;
+  }
+}
+
+const PLAIN_TRANSACTION_EIP7702_REFUSAL =
+  "A plain session transaction cannot be an EIP-7702 transaction; delegation redemptions use signTransactionDelegationRedemption.";
+
+const REDEMPTION_EIP7702_REFUSAL =
+  "The redemption transaction must not carry an EIP-7702 authorization list.";
+
+/**
+ * A type-4 transaction carries an authorization list that sets code on the
+ * signer's account. Only a delegation redemption may be signed for an eip7702
+ * key, so every other bound path refuses it before the digest is computed.
+ */
+function refuseEip7702Transaction(
+  tx: TransactionRequest,
+  message: string,
+): void {
+  if (tx.type === "eip7702" || tx.authorizationList !== undefined) {
+    throw createSessionKeyError("session_key_scope_exceeded", message);
+  }
+}
+
+/**
+ * One snapshot of a caller transaction. The guard, the digest and the scope
+ * facts all read this copy, so a getter on the caller's object is read once
+ * and cannot give the guard one value and the hash another. Invalid input is
+ * refused as session_key_invalid_input, the same as `transactionDigest`.
+ */
+function snapshotSessionTransaction(
+  tx: TransactionRequest,
+): TransactionRequest {
+  try {
+    return snapshotTransaction(tx);
+  } catch (err) {
+    if (err instanceof TransactionInputError) {
+      throw createSessionKeyError("session_key_invalid_input", err.message);
+    }
+    throw err;
+  }
+}
+
+/** The scope-check facts of a transaction, taken from that same transaction. */
+function transactionFacts(tx: TransactionRequest): SessionKeyTransaction {
+  return {
+    to: tx.to,
+    value: tx.value ?? "0x0",
+    data: tx.data ?? "0x",
+    chainId: tx.chainId,
+    gas: tx.gas,
   };
 }
 
@@ -379,8 +450,9 @@ export class SessionKeyManager {
    *
    * The bundle contains the raw private key. Once returned, `revokeSession()`
    * can no longer stop its use — only this manager's own signing paths honour
-   * revocation. Prefer `signWithSessionKey()` /
-   * `signWithVerifiedOffchainAuthorization()`, which never release the key.
+   * revocation. Refused for every session key (keys always carry rails since
+   * 0.14), since the raw key could sign any digest. Use
+   * `signTransactionWithSessionKey()`, which never releases the key.
    *
    * @param sessionId - The session key ID
    * @returns Decrypted SessionKeyBundle or throws
@@ -394,41 +466,21 @@ export class SessionKeyManager {
       throw createSessionKeyError("session_key_not_found", sessionId);
     }
 
-    // Validate status
     this.validateSessionStatus(stored);
-    // The raw key signs anything; handing it out would undo the recipient
-    // limit exactly as a raw digest would.
-    this.refuseRawDigestForRecipientScope(stored);
-
-    // Decrypt private key
-    const privateKey = decryptPrivateKey(
-      stored.keyPair,
-      this.encryptionPassword,
-      this.config.pbkdf2Iterations,
-    );
-
-    const bundle: SessionKeyBundle = {
-      id: stored.id,
-      privateKey,
-      scope: stored.scope,
-      authorization: stored.authorization,
-      signerAddress: stored.authorization.signerAddress,
-    };
-
-    this.activeBundle = bundle;
-    return bundle;
+    // The raw key signs any digest. Every session key is refused here, so the
+    // private key is never decrypted or returned.
+    this.refuseRawDigest(stored);
   }
 
   // ─── Use Session Key (sign transaction) ──────────────────────────────
 
   /**
-   * Sign a raw message hash using a session key.
-   * Validates scope, increments usage counter, and returns the signature.
+   * Sign a caller-supplied digest using a session key.
    *
-   * The scope is checked against `tx`, which the caller describes; nothing
-   * ties `messageHash` to it. Use `signTypedDataWithSessionKey` where amount
-   * and recipient must be bound to what is signed. Refused while the scope
-   * sets `allowedRecipients`.
+   * Refused for every key with rails. Nothing ties `messageHash` to `tx`, so
+   * the signature could cover a different transaction than the one the scope
+   * checked. Use `signTransactionWithSessionKey()` (transactions) or
+   * `signTypedDataWithSessionKey()` (EIP-3009), which derive the digest.
    *
    * @param sessionId - The session key ID
    * @param messageHash - The 32-byte message hash to sign (0x-prefixed hex)
@@ -448,17 +500,16 @@ export class SessionKeyManager {
         if (!stored) {
           throw createSessionKeyError("session_key_not_found", sessionId);
         }
-        this.refuseRawDigestForRecipientScope(stored);
-        return this.signStoredSessionKey(stored, messageHash, tx);
+        this.refuseRawDigest(stored);
       }),
     );
   }
 
   /**
-   * Revalidate a signed off-chain policy and consume its budget in one locked
-   * operation. Product execution flows should use this method instead of a
-   * separate `verifyOffchainAuthorization()` + `signWithSessionKey()` pair,
-   * which would leave a cross-tab authorization-change window between calls.
+   * Revalidate a signed off-chain policy, then refuse the caller-supplied
+   * digest exactly as `signWithSessionKey()` does for every key with rails.
+   * Use `signTypedDataWithVerifiedOffchainAuthorization()` or the bound
+   * transaction paths instead.
    */
   async signWithVerifiedOffchainAuthorization(
     sessionId: string,
@@ -490,8 +541,7 @@ export class SessionKeyManager {
             "Off-chain authorization no longer matches the signed policy",
           );
         }
-        this.refuseRawDigestForRecipientScope(stored);
-        return this.signStoredSessionKey(stored, messageHash, tx);
+        this.refuseRawDigest(stored);
       }),
     );
   }
@@ -574,15 +624,17 @@ export class SessionKeyManager {
   }
 
   /**
-   * A raw digest cannot be tied to the `tx` it arrives with: the manager
-   * signs the 32 bytes it is handed and checks the transaction it is told
-   * about. So a scope that limits *who gets paid* cannot be enforced on it —
-   * a harmless `transfer(payee, 0)` could accompany the digest of a transfer
-   * to anyone (independent review, 2026-09-23). While `allowedRecipients` is
-   * set, only paths where the manager derives the digest itself
-   * (`signTypedDataWithSessionKey`) may sign.
+   * A raw digest cannot be tied to the transaction it is signed for: the
+   * manager would sign the 32 bytes it is handed, while the scope check sees
+   * whatever `tx` the caller describes. A harmless `transfer(payee, 0)` could
+   * accompany the digest of a transfer to anyone (independent review,
+   * 2026-09-23). So every key with valid rails refuses a caller-supplied
+   * digest: `signWithSessionKey`, `signWithVerifiedOffchainAuthorization`,
+   * `signDelegationRedemption` and `getSessionBundle`. Only paths where the
+   * manager derives the digest itself may sign: `signTransactionWithSessionKey`,
+   * `signTransactionDelegationRedemption` and `signTypedDataWithSessionKey`.
    */
-  private refuseRawDigestForRecipientScope(stored: StoredSessionKey): void {
+  private refuseRawDigest(stored: StoredSessionKey): never {
     if (!hasValidSessionKeyRails(stored.scope.rails)) {
       throw createSessionKeyError(
         "session_key_scope_exceeded",
@@ -603,18 +655,13 @@ export class SessionKeyManager {
     ) {
       throw createSessionKeyError(
         "session_key_scope_exceeded",
-        "This session key limits recipients; a raw digest cannot be bound to a recipient. Use signTypedDataWithSessionKey.",
+        "This session key limits recipients; a raw digest cannot be bound to a recipient. Use signTransactionWithSessionKey.",
       );
     }
-    // A raw digest could be an EIP-3009 payload. Keep it unavailable when the
-    // scope permits either payment rail that uses TransferWithAuthorization;
-    // a transfer-only scope can still sign a transaction hash as before.
-    if (stored.scope.rails.some((rail) => EIP3009_RAILS.includes(rail))) {
-      throw createSessionKeyError(
-        "session_key_scope_exceeded",
-        "This session key limits rails; a raw digest cannot be bound to a rail. Use signTypedDataWithSessionKey.",
-      );
-    }
+    throw createSessionKeyError(
+      "session_key_scope_exceeded",
+      "A raw digest cannot be bound to the transaction it signs. Use signTransactionWithSessionKey (or signTransactionDelegationRedemption for a delegation redemption, signTypedDataWithSessionKey for EIP-3009).",
+    );
   }
 
   /** Typed-data-specific refusals, then the transaction the scope check sees. */
@@ -630,10 +677,7 @@ export class SessionKeyManager {
     // Default-deny: a scope that names no EIP-3009 rail (including one with
     // no `rails` at all) never signs a TransferWithAuthorization, so a
     // transfer-only grant cannot become an x402/MPP charge signature.
-    if (
-      !EIP3009_RAILS.includes(rail) ||
-      !stored.scope.rails?.includes(rail)
-    ) {
+    if (!EIP3009_RAILS.includes(rail) || !stored.scope.rails?.includes(rail)) {
       throw createSessionKeyError(
         "session_key_scope_exceeded",
         `TransferWithAuthorization needs the ${rail} rail in the session scope`,
@@ -967,20 +1011,11 @@ export class SessionKeyManager {
   }
 
   /**
-   * Sign the session key's redemption transaction.
-   *
-   * `digest` is the signing hash of `outerTx`, computed by the caller (core
-   * has no EVM transaction encoder). What is checked: `outerTx` is exactly
-   * the redemption of this key's delegation for `execution` on its chain,
-   * with value 0; `execution` passes the session scope off chain; usage is
-   * recorded before the signature is returned. The digest itself is not
-   * derived here, so a caller holding the manager could have the key sign
-   * another transaction or message from its own address. The owner's assets
-   * still move only through the delegation, whose caveats — including
-   * RedeemerEnforcer pinning this key as the only redeemer, so a
-   * re-delegation it is tricked into signing cannot be redeemed — the chain
-   * enforces regardless of what the key signs. The exposure left is the
-   * key's own gas funds.
+   * Raw-digest redemption signing. Refused for every key with rails: the
+   * digest is not derived here, so a caller holding the manager could have
+   * the key sign another transaction from its own address. Use
+   * `signTransactionDelegationRedemption`, which derives the digest from the
+   * transaction it checks.
    */
   async signDelegationRedemption(
     sessionId: string,
@@ -1001,11 +1036,43 @@ export class SessionKeyManager {
         if (!stored) {
           throw createSessionKeyError("session_key_not_found", sessionId);
         }
+        this.refuseRawDigest(stored);
+      }),
+    );
+  }
+
+  /**
+   * Sign the session key's redemption of `execution`, with `digest` as the
+   * signing hash of `outerTx`. Reached only from
+   * `signTransactionDelegationRedemption`, which derives both from one `tx`.
+   *
+   * What is checked: `outerTx` is exactly the redemption of this key's
+   * delegation for `execution` on its chain, with value 0; `execution` passes
+   * the session scope off chain; usage is recorded before the signature is
+   * returned. The owner's assets still move only through the delegation,
+   * whose caveats — including RedeemerEnforcer pinning this key as the only
+   * redeemer — the chain enforces regardless of what the key signs.
+   */
+  private signRedemptionWithDigest(
+    sessionId: string,
+    digest: `0x${string}`,
+    outerTx: {
+      to?: string;
+      value?: string;
+      data?: string;
+      chainId?: number;
+      gas?: string;
+    },
+    execution: FrameworkExecution,
+  ): Promise<`0x${string}`> {
+    return this.storage.withKeyLock(sessionId, () =>
+      this.withSessionLock(sessionId, async () => {
+        const stored = await this.readStoredSession(sessionId);
+        if (!stored) {
+          throw createSessionKeyError("session_key_not_found", sessionId);
+        }
         this.validateSessionStatus(stored);
-        if (
-          stored.scope.rails !== undefined &&
-          !stored.scope.rails.includes("transfer")
-        ) {
+        if (!stored.scope.rails?.includes("transfer")) {
           throw createSessionKeyError(
             "session_key_scope_exceeded",
             "A delegation redemption needs the transfer rail in the session scope",
@@ -1036,6 +1103,149 @@ export class SessionKeyManager {
         });
       }),
     );
+  }
+
+  /**
+   * Sign a transaction with a session key. The digest is derived here from
+   * `tx`, and the scope check runs on the facts of that same `tx`, so the
+   * signature cannot be bound to one transaction while the policy checks
+   * another.
+   *
+   * Refused for eip7702 keys (they sign only redemptions). A plain transaction
+   * needs the `transfer` rail, so a key with only `x402-exact` or
+   * `mpp-charge` cannot sign one (default-deny).
+   *
+   * `allowedRecipients` (recipient-limited keys) is permitted here, unlike on
+   * the raw-digest methods: the signed facts are bound to the digest, so the
+   * recipient check runs on what is actually signed. A transaction to a
+   * recipient outside the list is refused by the same scope check.
+   */
+  async signTransactionWithSessionKey(
+    sessionId: string,
+    tx: TransactionRequest,
+  ): Promise<`0x${string}`> {
+    const snapshot = snapshotSessionTransaction(tx);
+    refuseEip7702Transaction(snapshot, PLAIN_TRANSACTION_EIP7702_REFUSAL);
+    return this.signTransactionDigest(
+      sessionId,
+      transactionDigest(snapshot),
+      transactionFacts(snapshot),
+    );
+  }
+
+  /**
+   * Sign a transaction with a session key, after revalidating the stored
+   * off-chain authorization. Same arguments and failure behaviour as
+   * `signWithVerifiedOffchainAuthorization`, but the digest and the scope
+   * facts are both derived from `tx`; no caller digest is accepted.
+   */
+  async signTransactionWithVerifiedOffchainAuthorization(
+    sessionId: string,
+    buildExpectedMessage: (policy: SessionKeyInfo) => string,
+    verify: OffchainAuthorizationVerifier,
+    tx: TransactionRequest,
+  ): Promise<`0x${string}`> {
+    const snapshot = snapshotSessionTransaction(tx);
+    refuseEip7702Transaction(snapshot, PLAIN_TRANSACTION_EIP7702_REFUSAL);
+    const digest = transactionDigest(snapshot);
+    const facts = transactionFacts(snapshot);
+    return this.storage.withKeyLock(sessionId, () =>
+      this.withSessionLock(sessionId, async () => {
+        const stored = await this.readStoredSession(sessionId);
+        if (!stored) {
+          throw createSessionKeyError("session_key_not_found", sessionId);
+        }
+        this.validateSessionStatus(stored);
+        const expectedMessage = buildExpectedMessage(
+          this.toSessionKeyInfo(stored),
+        );
+        if (
+          !(await this.verifyStoredOffchainAuthorization(
+            stored,
+            expectedMessage,
+            verify,
+          ))
+        ) {
+          throw createSessionKeyError(
+            "session_key_invalid_input",
+            "Off-chain authorization no longer matches the signed policy",
+          );
+        }
+        return this.signTransactionStored(stored, digest, facts);
+      }),
+    );
+  }
+
+  /**
+   * The bound transaction path's routine: `digest` is the hash of the
+   * transaction `facts` describe, derived by the caller from that one `tx`.
+   * Same locking, validation, scope check and accounting as every other
+   * signing path. Not reachable with a caller-supplied digest.
+   */
+  private signTransactionDigest(
+    sessionId: string,
+    digest: `0x${string}`,
+    facts: SessionKeyTransaction,
+  ): Promise<`0x${string}`> {
+    return this.storage.withKeyLock(sessionId, () =>
+      this.withSessionLock(sessionId, async () => {
+        const stored = await this.readStoredSession(sessionId);
+        if (!stored) {
+          throw createSessionKeyError("session_key_not_found", sessionId);
+        }
+        return this.signTransactionStored(stored, digest, facts);
+      }),
+    );
+  }
+
+  /**
+   * Transaction-specific checks, then signing. Callers hold the key and
+   * session locks and have already loaded `stored`.
+   */
+  private async signTransactionStored(
+    stored: StoredSessionKey,
+    digest: `0x${string}`,
+    facts: SessionKeyTransaction,
+  ): Promise<`0x${string}`> {
+    this.validateSessionStatus(stored);
+    if (stored.scope.mode === "eip7702") {
+      throw createSessionKeyError(
+        "session_key_scope_exceeded",
+        "An eip7702 session key signs only delegation redemptions (signTransactionDelegationRedemption).",
+      );
+    }
+    if (!stored.scope.rails?.includes("transfer")) {
+      throw createSessionKeyError(
+        "session_key_scope_exceeded",
+        "A transaction needs the transfer rail in the session scope",
+      );
+    }
+    return this.signStoredSessionKey(stored, digest, facts);
+  }
+
+  /**
+   * Sign the redemption transaction `tx` for `execution`. The digest and the
+   * outer-transaction facts are both derived from `tx`, so the caller cannot
+   * pass an outer transaction other than the one hashed. `outerTx.gas`, when
+   * given, must equal `tx.gas`.
+   */
+  async signTransactionDelegationRedemption(
+    sessionId: string,
+    tx: TransactionRequest,
+    outerTx: { gas?: string },
+    execution: FrameworkExecution,
+  ): Promise<`0x${string}`> {
+    const snapshot = snapshotSessionTransaction(tx);
+    refuseEip7702Transaction(snapshot, REDEMPTION_EIP7702_REFUSAL);
+    const digest = transactionDigest(snapshot);
+    const facts = transactionFacts(snapshot);
+    if (outerTx.gas !== undefined && outerTx.gas !== facts.gas) {
+      throw createSessionKeyError(
+        "session_key_invalid_input",
+        "outerTx.gas must equal the gas of the transaction being signed",
+      );
+    }
+    return this.signRedemptionWithDigest(sessionId, digest, facts, execution);
   }
 
   /**

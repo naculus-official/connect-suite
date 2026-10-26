@@ -34,7 +34,9 @@ export default defineConfig({
   sourcemap: true,
   clean: false,
   minify: true,
-  noExternal: [/^@noble\//],
+  // The signing subpath is inlined too, and only that subpath: the rest of
+  // connect-core stays external so it never reaches the worker bundle.
+  noExternal: [/^@noble\//, /^@naculus\/connect-core\/signing$/],
   onSuccess: () => {
     console.log("@naculus/wallet-engine crypto worker built successfully");
   },

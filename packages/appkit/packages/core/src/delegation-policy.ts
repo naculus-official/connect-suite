@@ -13,6 +13,8 @@ import {
   delegationTypedData,
   WalletError,
 } from "@naculus/connect-core";
+import type { TransactionRequest } from "@naculus/connect-core";
+import { transactionSigningHash } from "@naculus/connect-core/signing";
 
 /**
  * Signed off-chain delegation policies: the complete product flow, shared by
@@ -58,8 +60,17 @@ export interface PolicyExecutionCheck {
   reason: string;
 }
 
+/**
+ * What an execution adapter prepared for one policy execution.
+ *
+ * Breaking change: `request` is new and required. Adapters must return the
+ * exact transaction they will broadcast as a `TransactionRequest`; `digest`
+ * must equal `transactionSigningHash(request)`. Signing refuses any mismatch.
+ */
 export interface PreparedPolicyExecution {
   digest: Hex;
+  /** The exact transaction to sign, as connect-core's transaction request. */
+  request: TransactionRequest;
   transaction: SessionKeyTransaction;
   payload: unknown;
 }
@@ -247,8 +258,7 @@ export interface DelegationPolicyFlow {
   ) => Promise<DelegationPolicyPreview>;
   signPolicyDigest: (
     policyId: string,
-    digest: `0x${string}`,
-    tx: SessionKeyTransaction,
+    prepared: PreparedPolicyExecution,
   ) => Promise<`0x${string}`>;
   executePolicy: (
     policyId: string,
@@ -581,19 +591,47 @@ export function createDelegationPolicyFlow(
     };
   };
 
+  /**
+   * Signs the prepared transaction under a verified off-chain authorization.
+   * connect-core derives the digest and scope facts from `request`, so the
+   * digest the adapter reported must equal the hash of that request, and the
+   * request must mean what the policy was checked against.
+   */
   const signVerified = (
     policyId: string,
-    digest: `0x${string}`,
-    tx: SessionKeyTransaction,
-  ) =>
-    manager.signWithVerifiedOffchainAuthorization(
+    prepared: PreparedPolicyExecution,
+  ) => {
+    const { request } = prepared;
+    const computed = `0x${Array.from(transactionSigningHash(request), (byte) =>
+      byte.toString(16).padStart(2, "0"),
+    ).join("")}`;
+    if (computed !== prepared.digest.toLowerCase()) {
+      throw new WalletError(
+        "invalid_input",
+        `The prepared digest ${prepared.digest} does not match the signing hash ${computed} of the prepared transaction request.`,
+      );
+    }
+    if (
+      !sameExecutionIntent(prepared.transaction, {
+        to: request.to,
+        value: request.value,
+        data: request.data,
+        chainId: request.chainId,
+      })
+    ) {
+      throw new WalletError(
+        "invalid_input",
+        "The prepared transaction request differs from the prepared transaction checked by the policy.",
+      );
+    }
+    return manager.signTransactionWithVerifiedOffchainAuthorization(
       policyId,
       (authoritativePolicy) =>
         buildDelegationPolicyMessage(authoritativePolicy, origin),
       deps.verifySignature,
-      digest,
-      tx,
+      request,
     );
+  };
 
   /**
    * An eip7702 policy's signature is over its redemption transaction. The
@@ -618,10 +656,23 @@ export function createDelegationPolicyFlow(
             value: bigint;
             callData: `0x${string}`;
           };
+          // The exact transaction the adapter broadcasts; the digest is
+          // derived from it by connect-core, never taken from the adapter.
+          unsigned?: {
+            type: "eip1559";
+            chainId: number;
+            nonce: number;
+            to: `0x${string}`;
+            value: bigint;
+            data: `0x${string}`;
+            gas: bigint;
+            maxFeePerGas: bigint;
+            maxPriorityFeePerGas: bigint;
+          };
         }
       | null
       | undefined;
-    if (!payload?.outerTx || !payload.execution) {
+    if (!payload?.outerTx || !payload.execution || !payload.unsigned) {
       throw new WalletError(
         "invalid_input",
         "The EIP-7702 adapter did not return a redemption to sign.",
@@ -655,20 +706,46 @@ export function createDelegationPolicyFlow(
         "The EIP-7702 adapter's execution differs from the requested transaction.",
       );
     }
-    return manager.signDelegationRedemption(
+    const { unsigned } = payload;
+    const hex = (value: bigint | number) => `0x${value.toString(16)}`;
+    const tx: Parameters<
+      SessionKeyManager["signTransactionDelegationRedemption"]
+    >[1] = {
+      type: "eip1559",
+      chainId: unsigned.chainId,
+      nonce: hex(unsigned.nonce),
+      to: unsigned.to,
+      value: hex(unsigned.value),
+      data: unsigned.data,
+      gas: hex(unsigned.gas),
+      maxFeePerGas: hex(unsigned.maxFeePerGas),
+      maxPriorityFeePerGas: hex(unsigned.maxPriorityFeePerGas),
+    };
+    return manager.signTransactionDelegationRedemption(
       policyId,
-      prepared.digest,
-      payload.outerTx,
+      tx,
+      { gas: payload.outerTx.gas },
       payload.execution,
     );
   };
 
+  /**
+   * Signs one prepared execution under the persisted off-chain policy.
+   *
+   * Breaking change: the input is now the whole `PreparedPolicyExecution`
+   * (with its `request`), not a bare `digest` and `tx`. The digest is checked
+   * against the request before signing.
+   */
   const signPolicyDigest = async (
     policyId: string,
-    digest: `0x${string}`,
-    tx: SessionKeyTransaction,
+    prepared: PreparedPolicyExecution,
   ) => {
-    const preview = await previewPolicyExecution(policyId, tx, 1, "any");
+    const preview = await previewPolicyExecution(
+      policyId,
+      prepared.transaction,
+      1,
+      "any",
+    );
     if (preview.policy?.scope.mode === "eip7702") {
       throw new WalletError(
         "method_not_allowed",
@@ -678,7 +755,7 @@ export function createDelegationPolicyFlow(
     if (!preview.ready) {
       throw new WalletError("method_not_allowed", preview.reason);
     }
-    return signVerified(policyId, digest, tx);
+    return signVerified(policyId, prepared);
   };
 
   const executePolicy = async (
@@ -740,7 +817,7 @@ export function createDelegationPolicyFlow(
     const signature =
       preview.policy.scope.mode === "eip7702"
         ? await signRedemption(policyId, prepared)
-        : await signVerified(policyId, prepared.digest, prepared.transaction);
+        : await signVerified(policyId, prepared);
     const submission = await adapter.broadcast({
       policy: preview.policy,
       prepared,

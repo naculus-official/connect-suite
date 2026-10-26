@@ -1,8 +1,8 @@
 # @naculus/connect-native
 
-## 0.14.2 — 2026-10-26
+## 0.15.0 — 2026-10-26
 
-- First release from the connect-suite monorepo. connect-lib dependency range moves to `^0.14.2`.
+- connect-lib dependency range moves to `^0.15.0`.
 - Fix: `AuthorizationConsentNative` and `AuthorizationListNative` wrap literal text in `<Text>`; React Native throws on text outside `<Text>`.
 
 ## 0.14.1 — 2026-10-25

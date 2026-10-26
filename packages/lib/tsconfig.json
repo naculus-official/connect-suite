@@ -19,6 +19,7 @@
       "@naculus/connect-core/cctp": [
         "./packages/core/src/routes/providers/CctpBridgeProvider.ts"
       ],
+      "@naculus/connect-core/signing": ["./packages/core/src/signing/index.ts"],
       "@naculus/connector-walletconnect": [
         "./packages/connector-walletconnect/src"
       ],

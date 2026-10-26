@@ -447,6 +447,7 @@
   type TokenSearchResult
   type TopUpChannelTransaction
   type TransactionDescriptor
+  TransactionRequest
   TRUSTED_CHANNEL_PROGRAMS
   type TrustedChannelProgram
   type TxMetadata
@@ -501,3 +502,22 @@
   encodeCctpReceiveMessage
   fetchCctpFee
   waitForCctpAttestation
+./signing:
+  assembleSignedTransaction
+  authorizationHash
+  Eip7702AuthorizationOptions
+  Eip7702AuthorizationRequest
+  encodeRlpList
+  hexToBytes
+  serializeSignedTransaction
+  signedAuthorization
+  SignedEip7702Authorization
+  snapshotAuthorization
+  snapshotTransaction
+  toRlpBytes
+  toRlpQuantity
+  TransactionInputError
+  TransactionRequest
+  transactionSignature
+  type TransactionSignature
+  transactionSigningHash

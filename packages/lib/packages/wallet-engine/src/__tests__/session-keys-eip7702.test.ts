@@ -96,7 +96,7 @@ function mockRpc(code: string | null = DELEGATED_CODE) {
 
 async function wallet(options: { isolation?: "worker" } = {}) {
   const w = new PocketWallet({
-  encryptionPassphrase: async () => "test-passphrase-only",
+    encryptionPassphrase: async () => "test-passphrase-only",
     storage: new MemoryWalletStorage(),
     autoSave: false,
     chainId: "eip155:8453",
@@ -187,7 +187,7 @@ describe("PocketWallet eip7702 session keys", () => {
     mockRpc();
     const info = await w.createSessionKey(scope);
     const calls = mockRpc();
-    const spy = vi.spyOn(manager(w), "signDelegationRedemption");
+    const spy = vi.spyOn(manager(w), "signTransactionDelegationRedemption");
     const data = transferData(PAYEE, 400n);
 
     const result = await w.sendWithSession(info.id, { to: USDC, data });
@@ -198,20 +198,22 @@ describe("PocketWallet eip7702 session keys", () => {
       calls.find((c) => c.method === "eth_getTransactionCount")?.params,
     ).toEqual([self, "pending"]);
 
-    const [, digest, outer, execution] = spy.mock.calls[0]!;
+    // The bound path receives the transaction itself; core derives the digest.
+    const [, builtTx, , execution] = spy.mock.calls[0]!;
     expect(execution).toEqual({ target: USDC, value: 0n, callData: data });
-    expect(outer.to).toBe(DELEGATION_FRAMEWORK.delegationManager);
+    expect(builtTx.to).toBe(DELEGATION_FRAMEWORK.delegationManager);
     const expectedTx = {
       to: DELEGATION_FRAMEWORK.delegationManager,
       value: "0x0",
-      data: outer.data,
+      data: builtTx.data,
       nonce: "0x3",
       gas: "0x30d40",
       chainId: 8453,
       maxFeePerGas: "0x6fc23ac00",
       maxPriorityFeePerGas: "0x3b9aca00",
     };
-    // The digest core signed is the hash of the transaction that was sent.
+    // The transaction core signed is the one that was sent.
+    const digest = `0x${bytesToHex(transactionSigningHash(builtTx))}`;
     expect(digest).toBe(`0x${bytesToHex(transactionSigningHash(expectedTx))}`);
     const signature = (await spy.mock.results[0]!.value) as string;
     const sig = hexToBytes(signature.slice(2));

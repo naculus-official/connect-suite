@@ -7,6 +7,7 @@ import {
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { LEGACY_SESSION_KEYS_STORAGE_KEY } from "../session-keys/embedded";
 import { EVMSigner } from "../signers/evm";
+import { serializeSignedTransaction } from "../signers/evm-tx";
 import type { StorageAdapter } from "../storage/types";
 import type { WalletData } from "../wallet";
 import { PocketWallet } from "../wallet";
@@ -53,7 +54,7 @@ async function wallet(
   storage: CoreStorageAdapter = new MemoryStorageAdapter(),
 ) {
   const w = new PocketWallet({
-  encryptionPassphrase: async () => "test-passphrase-only",
+    encryptionPassphrase: async () => "test-passphrase-only",
     storage: new MemoryWalletStorage(),
     autoSave: false,
     chainId: "eip155:1",
@@ -146,22 +147,30 @@ describe("PocketWallet session keys on the core engine", () => {
         config: { pbkdf2Iterations: 1_000, unsafeAllowWeakKdf: true },
       },
     );
-    const { privateKey } = await mgr.getSessionBundle(info.id);
-    const { signature: expected } = await new EVMSigner().signTransaction(
-      {
-        to: USDC,
-        data,
-        nonce: "0x3",
-        gas: "0xea60",
-        chainId: 1,
-        maxFeePerGas: "0x6fc23ac00",
-        maxPriorityFeePerGas: "0x3b9aca00",
-      },
-      privateKey,
+    const expectedTx = {
+      to: USDC,
+      data,
+      nonce: "0x3",
+      gas: "0xea60",
+      chainId: 1,
+      maxFeePerGas: "0x6fc23ac00",
+      maxPriorityFeePerGas: "0x3b9aca00",
+    };
+    // The bound path signs the same transaction; ECDSA here is deterministic,
+    // so the re-signed transaction must be the one that was broadcast.
+    const signature = await mgr.signTransactionWithSessionKey(
+      info.id,
+      expectedTx,
     );
     expect(
       calls.find((c) => c.method === "eth_sendRawTransaction")?.params,
-    ).toEqual([expected]);
+    ).toEqual([
+      serializeSignedTransaction(expectedTx, {
+        r: `0x${signature.slice(2, 66)}`,
+        s: `0x${signature.slice(66, 130)}`,
+        yParity: (Number.parseInt(signature.slice(130, 132), 16) - 27) as 0 | 1,
+      }),
+    ]);
   });
 
   it("enforces token allowances", async () => {
@@ -255,7 +264,10 @@ describe("PocketWallet session keys on the core engine", () => {
       removeItem: (k: string) => items.delete(k),
     });
     const w = await wallet();
-    await w.createSessionKey({ rails: ["transfer"], allowedContracts: [USDC] } as never);
+    await w.createSessionKey({
+      rails: ["transfer"],
+      allowedContracts: [USDC],
+    } as never);
     await w.listSessions();
     expect(items.get(LEGACY_SESSION_KEYS_STORAGE_KEY)).toBe(legacy);
   });
@@ -278,13 +290,24 @@ describe("PocketWallet session keys on the core engine", () => {
         config: { pbkdf2Iterations: 1_000, unsafeAllowWeakKdf: true },
       },
     );
-    const { authorization } = await mgr.getSessionBundle(info.id);
+    // The stored raw signature is not readable through the public model, so
+    // it is checked through the verifier: it must equal the wallet's EVM-key
+    // signature over the exact policy message.
+    const message = (await mgr.listActiveSessions()).find(
+      (k) => k.id === info.id,
+    )?.authorizationMessage as string;
     const expected = await new EVMSigner().signMessage(
-      { message: authorization.message as string },
+      { message },
       w.account("eip155")?.privateKey as `0x${string}`,
     );
-    expect(authorization.rawSignature).toBe(expected.signature);
-    expect(authorization.message).toContain(sessionKeyAddress(info.publicKey));
+    expect(message).toContain(sessionKeyAddress(info.publicKey));
+    expect(
+      await mgr.verifyOffchainAuthorization(
+        info.id,
+        message,
+        ({ signature }) => signature === expected.signature,
+      ),
+    ).toBe(true);
   });
 
   it("revokes a key whose authorization cannot be signed", async () => {
@@ -294,7 +317,7 @@ describe("PocketWallet session keys on the core engine", () => {
       throw new Error("user rejected");
     };
     const w = new PocketWallet({
-  encryptionPassphrase: async () => "test-passphrase-only",
+      encryptionPassphrase: async () => "test-passphrase-only",
       storage: new MemoryWalletStorage(),
       autoSave: false,
       signer: refusing,
@@ -305,7 +328,10 @@ describe("PocketWallet session keys on the core engine", () => {
     });
     await w.importMnemonic(MNEMONIC);
     await expect(
-      w.createSessionKey({ rails: ["transfer"], allowedContracts: [USDC] } as never),
+      w.createSessionKey({
+        rails: ["transfer"],
+        allowedContracts: [USDC],
+      } as never),
     ).rejects.toThrow("user rejected");
     const sessions = await w.listSessions();
     expect(sessions).toHaveLength(1);
@@ -358,14 +384,17 @@ describe("PocketWallet session keys on the core engine", () => {
 
   it("requires a mnemonic", async () => {
     const w = new PocketWallet({
-  encryptionPassphrase: async () => "test-passphrase-only",
+      encryptionPassphrase: async () => "test-passphrase-only",
       storage: new MemoryWalletStorage(),
       autoSave: false,
       sessionKeys: { storage: new MemoryStorageAdapter() },
     });
     await w.importPrivateKey(`0x${"ab".repeat(32)}`);
     await expect(
-      w.createSessionKey({ rails: ["transfer"], allowedContracts: [USDC] } as never),
+      w.createSessionKey({
+        rails: ["transfer"],
+        allowedContracts: [USDC],
+      } as never),
     ).rejects.toMatchObject({ code: "no_wallet" });
     expect(await w.listSessions()).toEqual([]);
   });

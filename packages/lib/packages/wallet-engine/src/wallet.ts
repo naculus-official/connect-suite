@@ -35,8 +35,7 @@ import { EVMSigner } from "./signers/evm";
 import {
   serializeSignedTransaction,
   snapshotAuthorization,
-  transactionSigningHash,
-} from "./signers/evm-tx";
+} from "@naculus/connect-core/signing";
 import { IsolatedSigner } from "./signers/isolated-signer";
 import type {
   DelegationTransactionResult,
@@ -2659,37 +2658,18 @@ export class PocketWallet {
     );
     validateFeeParams(resolvedFees);
 
-    // Build the final transaction, then hash exactly that transaction.
+    // Build the final transaction. The session key derives the digest from
+    // this exact transaction and checks the scope against the same facts.
     const builtTx = buildTransaction(sendTx, resolvedFees);
     builtTx.chainId = configuredChainId;
-    let digest: `0x${string}`;
-    try {
-      digest = `0x${Array.from(transactionSigningHash(builtTx), (b) =>
-        b.toString(16).padStart(2, "0"),
-      ).join("")}`;
-    } catch (err) {
-      throw new WalletError(
-        "invalid_input",
-        err instanceof Error ? err.message : "Invalid transaction.",
-      );
-    }
-
-    // Policy and signature in one locked step, on the same facts.
-    const outerFacts = {
-      to: builtTx.to,
-      value: builtTx.value ?? "0x0",
-      data: builtTx.data ?? "0x",
-      chainId: configuredChainId,
-      gas: builtTx.gas,
-    };
     const signature = execution
-      ? await mgr.signDelegationRedemption(
+      ? await mgr.signTransactionDelegationRedemption(
           sessionId,
-          digest,
-          outerFacts,
+          builtTx,
+          { gas: builtTx.gas },
           execution,
         )
-      : await mgr.signWithSessionKey(sessionId, digest, outerFacts);
+      : await mgr.signTransactionWithSessionKey(sessionId, builtTx);
     const v = Number.parseInt(signature.slice(130, 132), 16);
     const rawTx = serializeSignedTransaction(builtTx, {
       r: `0x${signature.slice(2, 66)}`,

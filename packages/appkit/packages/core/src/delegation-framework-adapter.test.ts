@@ -240,11 +240,21 @@ describe("eip7702 policies", () => {
     const { flow } = setup();
     const policy = await flow.createPolicy(scope);
     await expect(
-      flow.signPolicyDigest(
-        policy.id,
-        `0x${"ab".repeat(32)}`,
-        transfer(PAYEE, 1n),
-      ),
+      flow.signPolicyDigest(policy.id, {
+        digest: `0x${"ab".repeat(32)}`,
+        request: {
+          type: "eip1559",
+          chainId: 8453,
+          nonce: "0x0",
+          gas: "0x5208",
+          maxFeePerGas: "0x3b9aca00",
+          maxPriorityFeePerGas: "0x1",
+          to: USDC,
+          data: transfer(PAYEE, 1n).data,
+        },
+        transaction: transfer(PAYEE, 1n),
+        payload: null,
+      }),
     ).rejects.toMatchObject({ code: "method_not_allowed" });
   });
 

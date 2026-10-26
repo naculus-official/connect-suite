@@ -17,7 +17,7 @@ import type {
  * The session key sends `DelegationManager.redeemDelegations` from its own
  * address and pays the gas; the chain enforces the delegation's caveats. The
  * adapter builds that transaction and broadcasts it; the delegation-policy
- * flow signs it with connect-core's `signDelegationRedemption`, which
+ * flow signs it with connect-core's `signTransactionDelegationRedemption`, which
  * re-encodes the redemption from the stored delegation and refuses anything
  * else.
  *
@@ -165,8 +165,21 @@ export function createDelegationFrameworkAdapter(
         execution,
         unsigned,
       };
+      const hex = (value: bigint | number) => `0x${value.toString(16)}`;
       return {
         digest: codec.signingHash(unsigned),
+        // The same redemption as `unsigned`, as a request for the digest check.
+        request: {
+          type: "eip1559",
+          chainId: unsigned.chainId,
+          nonce: hex(unsigned.nonce),
+          to: unsigned.to,
+          value: hex(unsigned.value),
+          data: unsigned.data,
+          gas: hex(unsigned.gas),
+          maxFeePerGas: hex(unsigned.maxFeePerGas),
+          maxPriorityFeePerGas: hex(unsigned.maxPriorityFeePerGas),
+        },
         transaction,
         payload,
       };

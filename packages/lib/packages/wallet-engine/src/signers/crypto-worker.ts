@@ -1,15 +1,15 @@
 import { secp256k1 } from "@noble/curves/secp256k1.js";
 import { keccak_256 } from "@noble/hashes/sha3.js";
 import { bytesToHex } from "@noble/hashes/utils.js";
-import { typedDataSigningHash } from "./eip712";
 import {
   assembleSignedTransaction,
   authorizationHash,
+  hexToBytes,
   signedAuthorization,
   transactionSignature,
   transactionSigningHash,
-} from "./evm-tx";
-import { hexToBytes } from "./rlp";
+} from "@naculus/connect-core/signing";
+import { typedDataSigningHash } from "./eip712";
 import { signDigest } from "./secp256k1-digest";
 import type {
   Eip7702AuthorizationOptions,

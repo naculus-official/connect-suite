@@ -44,9 +44,9 @@ and third-party wallets.
 |---|---|---|---|---|
 | A1 | **Mnemonic** (BIP-39, 128-bit entropy) | `PocketWallet.generate()` / `importMnemonic()` (`wallet-engine/src/wallet.ts:872`, `:896`) | Inside the `WalletData` record written by the configured `StorageAdapter` (see §4.4) | `PocketWallet.data.mnemonic`, a JS string; readable through the `mnemonic` getter (`wallet.ts:1984`) and `getWalletData()` (`wallet.ts:2020`) |
 | A2 | **Embedded-wallet account keys** — secp256k1 (EIP-155) and ed25519 seed (Solana), per BIP-44 path | Derived from A1, or imported raw (`importPrivateKey`) | Same record as A1 (`WalletData.accounts[].privateKey`, hex) | `PocketWallet.data.accounts[]`; with `isolation: "worker"` also a copy of the EVM key inside the worker (`wallet.ts:868`) |
-| A3 | **EVM session keys** (secp256k1) | `SessionKeyManager.createSessionKey` (`core/src/session-keys/SessionKeyManager.ts:239`) | `StoredSessionKey` record; private key AES-256-GCM sealed (`core/src/session-keys/storage.ts:160`), PBKDF2-SHA256 ≥ 600 000 | Decrypted per signature in `signStoredSessionKey` (`SessionKeyManager.ts:1045`); retained in `activeBundle` (`:1082`) |
-| A4 | **Solana session keys** (ed25519, SPL delegate) | `SolanaSessionKeyManager.createSessionKey` (`core/src/session-keys/solana-session-keys.ts`) | Record under `solana_session_keys`; secret sealed with AES-GCM whose associated data is a hash of the record's fixed facts (`recordBinding`, `:137`) | Opened per payment, zero-filled after use (`signPayment`, `:490`) |
-| A5 | **Delegation / authorization signatures** — (a) off-chain policy signature by the owner over a policy message; (b) EIP-712 `Delegation` signed by the owner (Delegation Framework); (c) EIP-7702 authorization tuple; (d) owner-signed SPL `ApproveChecked` | (a) `setAuthorization` (`SessionKeyManager.ts:685`); (b) `attachDelegation` (`:790`); (c) `PocketWallet.signAuthorization` / `sendDelegation` (`wallet.ts:1277`, `:1667`); (d) `attachApproval` (`solana-session-keys.ts:419`) | (a), (b) in the session-key record, **not encrypted**; (c) on chain once sent; (d) on chain once broadcast | — |
+| A3 | **EVM session keys** (secp256k1) | `SessionKeyManager.createSessionKey` (`core/src/session-keys/SessionKeyManager.ts:287`) | `StoredSessionKey` record; private key AES-256-GCM sealed (`core/src/session-keys/storage.ts:176`), PBKDF2-SHA256 ≥ 600 000 | Decrypted per signature in `signStoredSessionKey` (`SessionKeyManager.ts:1271`); retained in `activeBundle` (`:1309`) |
+| A4 | **Solana session keys** (ed25519, SPL delegate) | `SolanaSessionKeyManager.createSessionKey` (`core/src/session-keys/solana-session-keys.ts`) | Record under `solana_session_keys`; secret sealed with AES-GCM whose associated data is a hash of the record's fixed facts (`recordBinding`, `:140`) | Opened per payment, zero-filled after use (`signPayment`, `:519`) |
+| A5 | **Delegation / authorization signatures** — (a) off-chain policy signature by the owner over a policy message; (b) EIP-712 `Delegation` signed by the owner (Delegation Framework); (c) EIP-7702 authorization tuple; (d) owner-signed SPL `ApproveChecked` | (a) `setAuthorization` (`SessionKeyManager.ts:738`); (b) `attachDelegation` (`:843`); (c) `PocketWallet.signAuthorization` / `sendDelegation` (`wallet.ts:1277`, `:1667`); (d) `attachApproval` (`solana-session-keys.ts:448`) | (a), (b) in the session-key record, **not encrypted**; (c) on chain once sent; (d) on chain once broadcast | — |
 | A6 | **Payment authorizations** — EIP-3009 `TransferWithAuthorization` signatures (x402 EVM `exact`, MPP `evm` charge), partially signed Solana `TransferChecked` transactions (x402 SVM `exact`, MPP `solana` charge) | `payments-x402/src/evm-exact.ts`, `svm-exact.ts`; `payments-mpp/src/evm-charge.ts`, `solana-charge.ts` | Not persisted by Naculus; sent in `PAYMENT-SIGNATURE` / `Authorization: Payment` | Bearer until settled or expired (see §5.6) |
 | A7 | **Storage unlock material** — wallet passphrase, WebAuthn PRF output, the RN key-store key | Supplied by the app (`encryptionPassphrase`, `prfUnlock`) or generated (`KeyStoreStorageAdapter`, `wallet-engine/src/storage/key-store.ts:65`) | Passphrase: never stored by Naculus. PRF salt: in the record (not secret by design, an internal design record). RN key: platform key store | Transient during `load`/`save` |
 | A8 | **Session-key budget counters** — `useCount`, `accumulatedValue`, `accumulatedGas`, `accumulatedTokenSpends`, Solana `spent` | Updated on every signature | Same record as A3/A4, **plaintext** | — |
@@ -141,7 +141,7 @@ error (`fetch.ts` comments).
 | Embedded wallet record (`PocketWallet`, `resolveStorage`, `wallet.ts`) | A1, A2 | Built-in IndexedDB by default, encrypted localStorage fallback, explicitly selected localStorage, or a custom adapter. **`encryptionPassphrase` is mandatory in every runtime for all adapters; missing it throws `WalletError('storage_unavailable', ...)`. The wallet encrypts records before any adapter receives them.** `EncryptedStorageAdapter` uses a random data key wrapped by PBKDF2-SHA256 600 000 (`storage/encrypted.ts:34`) and optionally by WebAuthn PRF → HKDF (`storage/unlock.ts:58`). `allowInsecureStorage` is deprecated and ignored. `IndexedDbStorageAdapter.load()` throws `storage_unavailable` when IndexedDB is missing. |
 | RN wallet record (`KeyStoreStorageAdapter`, `storage/key-store.ts:65`) | A1, A2 | AES-256-GCM via `@noble/ciphers` (`core/src/aead.ts:11`) under a random 32-byte key held by an app-supplied `WalletKeyStore` (e.g. iOS Keychain / Android Keystore); AAD binds a slot name |
 | EVM session keys, embedded wallet (`createEmbeddedSessionKeyManager`, `wallet-engine/src/session-keys/embedded.ts`) | A3, A5(a/b), A8 | `localStorage` under `naculus_embedded_` (`:30`), or memory. Private key sealed with a password = SHA-256(seed ‖ `"naculus/embedded-session-keys/v1"`) (`:54`). **Record metadata is plaintext and independent of whether the wallet record is encrypted.** |
-| EVM session keys, other hosts (`SessionKeyManager`) | A3, A5(a/b), A8 | App-supplied adapter. Password = `encryptionKey` if supplied, else a **deterministic** SHA-256 of the storage prefix and optional salt (`deriveEncryptionPassword`, `SessionKeyManager.ts:101`) — which any code knowing the prefix can recompute. AAD binds only the public key (`storage.ts:175`). |
+| EVM session keys, other hosts (`SessionKeyManager`) | A3, A5(a/b), A8 | App-supplied adapter. Password = `encryptionKey` if supplied, else a **deterministic** SHA-256 of the storage prefix and optional salt (`deriveEncryptionPassword`, `SessionKeyManager.ts:123`) — which any code knowing the prefix can recompute. AAD binds only the public key (`storage.ts:194`). |
 | Legacy wallet-engine session keys | pre-0.3.0 funded session-key EOAs | Left in `localStorage` under `naculus_session_keys`, never read or deleted (`embedded.ts:27`; an internal design record) |
 | Solana session keys | A4, A8 | App-supplied adapter; `encryptionKey` is required (constructor throws without it). AAD binds id, address, owner, cluster, mint, token program, decimals, budget, per-payment cap, recipients, expiry, max count (`recordBinding`). `status`, `spent`, `useCount` are **not** bound. |
 
@@ -205,30 +205,30 @@ responsibility **(inferred)**. `AuditLogger` defaults to a no-op sink
 
 ### 5.2 EVM session keys (A3) — `core/src/session-keys/SessionKeyManager.ts`
 
-Common to every signing method (`signStoredSessionKey`, `:1045`), under the
+Common to every signing method (`signStoredSessionKey`, `:1271`), under the
 per-key Web Lock and the manager's own lock:
 
 1. Record re-read from storage (never the cache).
 2. Status active, not expired, `useCount < maxTxCount`.
 3. Owner authorization present (`rawSignature` or `authorization`),
-   unless `unsafeAllowUnauthorizedSigning` (`:1053`).
+   unless `unsafeAllowUnauthorizedSigning` (`:1279`).
 4. `checkScopeAgainstTx`: chain allowlist, contract allowlist, forbidden
    selectors (default `approve`, `increaseAllowance`, `allowance`,
-   `setApprovalForAll`, `types.ts:274`), `tokenAllowances` for exact-length
+   `setApprovalForAll`, `types.ts:275`), `tokenAllowances` for exact-length
    `transfer` / `transferFrom` calldata (cumulative), recipient allowlist,
    method allowlist, per-tx and cumulative value and gas, count.
-5. Sign, then persist usage (`incrementUsageUnlocked`, `:1108`); a persist
+5. Sign, then persist usage (`incrementUsageUnlocked`, `:1341`); a persist
    failure throws, so the signature is not returned.
 
 Per method:
 
 | Method | What is signed | Binding between check and signature |
 |---|---|---|
-| `signWithSessionKey` (`:418`) | Caller-supplied 32-byte digest | **None**: the scope is checked against a caller-described `tx`. Refused when `allowedRecipients` is set or `mode = "eip7702"` (`refuseRawDigestForRecipientScope`, `:564`). |
-| `signWithVerifiedOffchainAuthorization` (`:444`) | Caller digest | As above, plus the stored policy signature is re-verified against a message rebuilt from the stored scope by a caller-supplied builder and verifier. |
-| `signTypedDataWithSessionKey` (`:488`) and `…WithVerifiedOffchainAuthorization` (`:513`) | EIP-712 digest **computed by the manager** from a snapshot of the request (`snapshotTypedDataRequest`, `typed-data.ts:83`) | Only `TransferWithAuthorization`; `from` = the key's address; token must have a `tokenAllowances` entry; `now < validBefore ≤ scope.expiry`; mapped to `transfer(to, value)` on `verifyingContract` for the scope check. |
-| `signDelegationRedemption` (`:936`) | Caller digest of the outer transaction | Outer `to`/`value`/`data`/`chainId` must equal the redemption the manager re-encodes from the stored delegation; the inner execution is scope-checked. The digest itself is not derived by the manager (the method's doc comment states the residual: the key's own gas funds). |
-| `getSessionBundle` (`:369`) | Returns the **raw private key** | Status checked; refused for recipient-scoped and `eip7702` keys. After return, revocation cannot recall it (doc comment at `revokeSession`). |
+| `signWithSessionKey` (`:449`) | Caller-supplied 32-byte digest, **refused** | **Refused for every key with rails** (`refuseRawDigest`, `:597`): nothing ties the digest to the caller-described `tx`. The bound `signTransactionWithSessionKey` (`:1086`) derives the digest from `tx`. |
+| `signWithVerifiedOffchainAuthorization` (`:474`) | Caller digest, **refused** | Refused for every key with rails, as above. The bound `signTransactionWithVerifiedOffchainAuthorization` (`:1103`) re-verifies the stored policy signature against a message rebuilt from the stored scope by a caller-supplied builder and verifier, and derives the digest from `tx`. |
+| `signTypedDataWithSessionKey` (`:517`) and `…WithVerifiedOffchainAuthorization` (`:543`) | EIP-712 digest **computed by the manager** from a snapshot of the request (`snapshotTypedDataRequest`, `typed-data.ts:83`) | Only `TransferWithAuthorization`; `from` = the key's address; token must have a `tokenAllowances` entry; `now < validBefore ≤ scope.expiry`; mapped to `transfer(to, value)` on `verifyingContract` for the scope check. |
+| `signDelegationRedemption` (`:980`) | Caller digest of the outer transaction, **refused** | Refused for every key with rails: the digest is not derived by the manager, so the key could sign another transaction from its own address. The bound `signTransactionDelegationRedemption` (`:1191`) derives the digest and the outer-transaction facts from `tx`; the inner execution is scope-checked. |
+| `getSessionBundle` (`:420`) | Would return the **raw private key**, **refused** | Status checked, then refused for every session key (keys always carry rails since 0.14; `refuseRawDigest`); the key is not decrypted or returned. |
 
 `eip7702`-mode keys are additionally bounded on chain by the Delegation
 Framework caveats (`core/src/session-keys/delegation-framework.ts`; mapping
@@ -236,17 +236,17 @@ and refusals in an internal design record), including
 `RedeemerEnforcer` pinning the session key as the only redeemer.
 `attachDelegation` requires the delegation to hash-equal the one the
 manager builds and the signature to recover to the owner with low-s
-(`:790`).
+(`:843`).
 
-The embedded wallet's `sendWithSession` (`wallet.ts:2459`) builds the
-transaction, computes its signing hash, and passes both to
-`signWithSessionKey` — so the embedded path is the raw-digest path, with
-wallet-engine as the party that ties digest to transaction.
+The embedded wallet's `sendWithSession` (`wallet.ts:2570`) builds the
+transaction and passes it to `signTransactionWithSessionKey` (`wallet.ts:2672`),
+which derives the digest inside connect-core. wallet-engine no longer supplies
+a digest on this path.
 
 ### 5.3 Solana session keys (A4) — `core/src/session-keys/solana-session-keys.ts`
 
-`signPayment` (`:490`) accepts payment facts, not bytes. Under the key's
-lock it re-checks (`check`, `:541`): status active, not expired, recipient
+`signPayment` (`:519`) accepts payment facts, not bytes. Under the key's
+lock it re-checks (`check`, `:571`): status active, not expired, recipient
 in the allowlist, `0 < amount ≤ maxPerPayment`, `spent + amount ≤ budget`,
 count, and fee payer ≠ key and ≠ owner (sponsored only). It then fetches
 the blockhash after `assertSolanaCluster`, builds the `TransferChecked`
@@ -256,7 +256,7 @@ that the secret's public key equals the stored address, signs, zero-fills
 the secret, re-verifies the result with `allowLighthouse: false`, and
 records the spend before returning. On chain, SPL `delegated_amount` caps
 the total independently. The one-delegate-per-token-account rule means
-approving a key replaces any other delegate (`attachApproval`, `:419`,
+approving a key replaces any other delegate (`attachApproval`, `:448`,
 retires the owner's other local keys for that mint).
 
 ### 5.4 Wallet-signed Solana payments
@@ -299,10 +299,10 @@ it is paying and does not track settlement **(inferred from §4.3)**.
 | R1 | Worker isolation is not key-material isolation: decryption on the main thread, key crosses `postMessage`, no protection against XSS or heap capture. `IsolatedSigner.init` (worker-side decryption) has no caller. | an internal design record |
 | R2 | Hot-wallet keys cannot be non-extractable `CryptoKey`s (no secp256k1 / mature ed25519 in WebCrypto); a record with PRF and passphrase wraps is only as strong as the passphrase. | an internal design record |
 | R3 | Off-chain session-key revocation is device-local; an exported `SessionKeyBundle` cannot be recalled; a leaked key plus a signed Delegation stays valid until `expiry` unless the owner calls `disableDelegation` on chain. | `SessionKeyManager.ts` `revokeSession` doc comment; an internal design record §Invariants |
-| R4 | A raw digest cannot be tied to the transaction described with it; hence the recipient-scope refusal. | `refuseRawDigestForRecipientScope` comment; an internal design record |
+| R4 | A raw digest cannot be tied to the transaction described with it; hence every raw-digest path refuses rails keys. | `refuseRawDigest` comment (`SessionKeyManager.ts:592`); an internal design record |
 | R5 | Pre-0.3.0 embedded session keys are funded EOAs whose only key copy stays in `naculus_session_keys`, unread. | an internal design record |
 | R6 | MPP gives no token EIP-712 domain; a wrong domain yields an unusable signature (liveness, not funds). | an internal design record §Step 4 |
-| R7 | Delegation Framework: allow-list only, no on-chain deny-list; multi-token / multi-recipient scopes refused; the session key's own gas funds are exposed to arbitrary digests in `signDelegationRedemption`. | an internal design record; `SessionKeyManager.ts:936` doc comment |
+| R7 | Delegation Framework: allow-list only, no on-chain deny-list; multi-token / multi-recipient scopes refused. `signDelegationRedemption` (which exposed the session key's own gas funds to arbitrary digests) is refused for rails keys; the residual for the bound `signTransactionDelegationRedemption` is not re-stated here. | an internal design record; `SessionKeyManager.ts:980` doc comment |
 | R8 | Solana: one delegate per token account; approving replaces another dapp's delegate. The chain never expires a delegate; after local expiry the owner must revoke. | an internal design record |
 | R9 | React Native embedded wallet signs in-thread; weaker isolation than the web worker. | an internal design record §Decisions |
 | R10 | Server-controlled requirement order, amount and payee reach the key; only policy and `approve` bound them. | `payments-x402/src/fetch.ts` doc comment; an internal design record |
@@ -314,22 +314,23 @@ These are stated from the code; the impact column is **(inferred)**.
 | # | Observation | Code | Inferred impact |
 |---|---|---|---|
 | O1 | `isolation: "secure"` is accepted but has no effect. | `wallet.ts:258`, `:574` | Integrators may believe in-memory secrets are encrypted/zeroed. |
-| O2 | Without `encryptionKey`, EVM session-key records are sealed under a password derivable from the public storage prefix. | `SessionKeyManager.ts:101` | At-rest encryption is obfuscation for such hosts. The embedded wallet always supplies a seed-derived key. |
-| O3 | EVM session-key budget counters, status and scope are plaintext and unauthenticated; the AAD binds only the public key. | `storage.ts:175`, `:449` (`incrementUsageUnlocked`) | Same-origin script can reset `accumulated*`/`useCount`, or widen `scope`. The `…WithVerifiedOffchainAuthorization` paths detect a widened scope (the rebuilt message no longer matches); the non-verified paths used by x402/MPP (§5.5) and by `sendWithSession` do not. Counters are unprotected on every path. The Solana manager binds scope into AAD but not `spent`; its total is capped on chain. |
-| O4 | `SessionKeyManager` keeps the last decrypted key in `activeBundle` after each signature. | `SessionKeyManager.ts:1082` | Prolongs plaintext key lifetime in memory; cleared only by revoke of that id or `clearAll`. |
+| O2 | Without `encryptionKey`, EVM session-key records are sealed under a password derivable from the public storage prefix. | `SessionKeyManager.ts:123` | At-rest encryption is obfuscation for such hosts. The embedded wallet always supplies a seed-derived key. |
+| O3 | EVM session-key budget counters, status and scope are plaintext and unauthenticated; the AAD binds only the public key. | `storage.ts:194`, `:468` (`incrementUsageUnlocked`) | Same-origin script can reset `accumulated*`/`useCount`, or widen `scope`. The `…WithVerifiedOffchainAuthorization` paths detect a widened scope (the rebuilt message no longer matches); the non-verified paths used by x402/MPP (§5.5) and by `sendWithSession` do not. Counters are unprotected on every path. The Solana manager binds scope into AAD but not `spent`; its total is capped on chain. |
+| O4 | `SessionKeyManager` keeps the last decrypted key in `activeBundle` after each signature. | `SessionKeyManager.ts:1309` | Prolongs plaintext key lifetime in memory; cleared only by revoke of that id or `clearAll`. |
 | O5 | Records sealed by the pre-0.2 CTR+HMAC scheme are still decryptable. | `legacyCtrHmacDecrypt`, `storage.ts:86` | Legacy code path in scope for review. |
 | O6 | Expiry is evaluated against the local clock (`Date.now()`) everywhere. | `validateSessionStatus`, Solana `check` | A skewed or manipulated clock extends usable lifetime off chain (on chain, `TimestampEnforcer` and `validBefore` still apply to the chain's clock). |
 | O7 | The EIP-7702 delegate allowlist lives in the request builder, not at the signing boundary. | `delegation.ts:147`; `connector-embedded/src/index.ts:606` | See §5.1. |
 | O8 | Solana RPC is trusted for the genesis hash used by `assertSolanaCluster`. | `solana-payment.ts:813` | A hostile RPC could let a devnet challenge be signed with mainnet facts; the cluster check is only as good as the RPC the app configured. |
-| O9 | `signWithSessionKey` (non-verified) accepts any non-empty `rawSignature` as "authorized"; verification happens only on the `…Verified…` paths. | `SessionKeyManager.ts:1053` | Storage write access can mark a key authorized. |
+| O9 | The non-verified signing paths (`signStoredSessionKey`, which the transaction-bound methods also reach) accept any non-empty `rawSignature` or `authorization` as "authorized"; verification happens only on the `…Verified…` paths. | `SessionKeyManager.ts:1271`, presence check at `:1279` | Storage write access can mark a key authorized. |
 
 ## 8. Questions an auditor should focus on
 
 1. **Digest binding.** For each path in §5.2, can a caller obtain a
    signature over bytes other than those the scope check evaluated?
-   Especially `sendWithSession` → `signWithSessionKey` (who computes the
-   hash, and can `tx` differ from the hashed transaction), and
-   `signDelegationRedemption`.
+   Especially `sendWithSession` → `signTransactionWithSessionKey` (the
+   digest and the scope facts are both derived from the same `tx` inside
+   connect-core; confirm that no path lets them differ), and
+   `signTransactionDelegationRedemption`.
 2. **Typed-data equivalence.** Is mapping `TransferWithAuthorization` to
    `transfer(to, value)` sound for every check it feeds (forbidden
    selectors, method allowlist, recipient allowlist, token allowance)? Are

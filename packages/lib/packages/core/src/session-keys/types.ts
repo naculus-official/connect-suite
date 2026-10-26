@@ -56,11 +56,14 @@ export interface SessionKeyScope {
    * `TransferWithAuthorization`. Any other calldata has no recognizable
    * recipient and is refused while this is set.
    *
-   * While this is non-empty the key signs only through
-   * `signTypedDataWithSessionKey`, where the manager derives the digest from
-   * what it checked. Raw-digest signing (`signWithSessionKey`,
-   * `signWithVerifiedOffchainAuthorization`) is refused: a digest cannot be
-   * tied to the recipient of the transaction it arrives with.
+   * While this is non-empty the key may sign a plain transaction through
+   * `signTransactionWithSessionKey`, but only when the scope check passes on
+   * that transaction's facts, so a transaction to a recipient outside the list
+   * is refused. A delegation redemption is signed by
+   * `signTransactionDelegationRedemption`. Raw-digest signing
+   * (`signWithSessionKey`, `signWithVerifiedOffchainAuthorization`) is refused:
+   * a digest cannot be tied to the recipient of the transaction it arrives
+   * with.
    */
   allowedRecipients?: `0x${string}`[];
 
@@ -75,11 +78,13 @@ export interface SessionKeyScope {
    *
    * - EIP-3009 `TransferWithAuthorization` (`signTypedDataWithSessionKey`)
    *   needs `x402-exact` or `mpp-charge`; both sign the same typed data.
-   * - A delegation redemption (`signDelegationRedemption`) needs `transfer`.
+   * - A delegation redemption (`signTransactionDelegationRedemption`) needs
+   *   `transfer`.
    * - Raw-digest signing (`signWithSessionKey`,
-   *   `signWithVerifiedOffchainAuthorization`) is refused when either
-   *   EIP-3009 rail is allowed: a digest cannot be tied to that rail.
-   *   Transfer-only scopes retain transaction-hash signing.
+   *   `signWithVerifiedOffchainAuthorization`) is refused for every scope
+   *   with rails: a caller digest cannot be tied to a transaction or rail.
+   *   Transactions are signed through `signTransactionWithSessionKey`, which
+   *   derives the digest from the transaction.
    *
    * Required for every EVM session key. Legacy or hand-built scopes without
    * a valid rail are rejected when created or validated. `compileEvmSessionScope`

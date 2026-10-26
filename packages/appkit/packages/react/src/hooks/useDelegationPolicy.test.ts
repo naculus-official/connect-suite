@@ -147,15 +147,26 @@ describe("useDelegationPolicy", () => {
 
     await act(async () => {
       await expect(
-        first.result.current.signPolicyDigest(
-          policyId,
-          `0x${"ab".repeat(32)}` as `0x${string}`,
-          {
+        first.result.current.signPolicyDigest(policyId, {
+          digest:
+            "0xa7f8ba5cf61df04e84f5d9c77ff9f618bae0b4272317539bf45e9d8fc185b9c9",
+          request: {
+            type: "eip1559",
+            chainId: 11155111,
+            nonce: "0x0",
+            gas: "0x5208",
+            maxFeePerGas: "0x3b9aca00",
+            maxPriorityFeePerGas: "0x1",
+            to: SIGNER,
+            value: "0x1",
+          },
+          transaction: {
             to: SIGNER,
             value: "1",
             chainId: 11155111,
           },
-        ),
+          payload: null,
+        }),
       ).resolves.toMatch(/^0x[a-f0-9]{130}$/i);
     });
 
@@ -361,7 +372,18 @@ describe("useDelegationPolicy", () => {
         reason: "The ERC-4337 module verified this policy on chain.",
       })),
       prepare: vi.fn(async () => ({
-        digest: `0x${"ab".repeat(32)}` as `0x${string}`,
+        digest:
+          "0xa7f8ba5cf61df04e84f5d9c77ff9f618bae0b4272317539bf45e9d8fc185b9c9" as `0x${string}`,
+        request: {
+          type: "eip1559" as const,
+          chainId: 11155111,
+          nonce: "0x0",
+          gas: "0x5208",
+          maxFeePerGas: "0x3b9aca00",
+          maxPriorityFeePerGas: "0x1",
+          to: SIGNER,
+          value: "0x1",
+        },
         transaction,
         payload: { userOperation: "prepared" },
       })),
@@ -436,7 +458,18 @@ describe("useDelegationPolicy", () => {
         reason: "ready",
       })),
       prepare: vi.fn(async () => ({
-        digest: `0x${"ab".repeat(32)}` as `0x${string}`,
+        digest:
+          "0x29be79c84b99b15887cd8e4eab2bfa6cde32e50c9792d63a5a6d3e0750e4e50f" as `0x${string}`,
+        request: {
+          type: "eip1559" as const,
+          chainId: 11155111,
+          nonce: "0x0",
+          gas: "0x5208",
+          maxFeePerGas: "0x3b9aca00",
+          maxPriorityFeePerGas: "0x1",
+          to: "0x9999999999999999999999999999999999999999",
+          value: "0x1",
+        },
         transaction: {
           ...transaction,
           to: "0x9999999999999999999999999999999999999999",

@@ -1,8 +1,10 @@
 # @naculus/connect-appkit-react
 
-## 0.14.2 — 2026-10-26
+## 0.15.0 — 2026-10-26
 
-- First release from the connect-suite monorepo. Version bump only: connect-lib dependency range moves to `^0.14.2`.
+- **Breaking: `useSendWithSession` no longer exposes `signWithSession`** — the hook provides only `checkScope`. Sign transactions with connect-core's `signTransactionWithSessionKey()`.
+- **Breaking: `signPolicyDigest` takes the prepared execution** — now `signPolicyDigest(policyId, prepared)` instead of `signPolicyDigest(policyId, digest, tx)`. `PreparedPolicyExecution` gains a required `request: TransactionRequest`; signing refuses a `digest` that does not equal its signing hash; the off-chain policy path compares the target, calldata, value and chain ID of the prepared `request` with the checked transaction (not gas, nonce or fees).
+- connect-lib dependency range moves to `^0.15.0`.
 
 ## 0.14.1 — 2026-10-25
 

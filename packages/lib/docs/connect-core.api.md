@@ -75,6 +75,15 @@ export interface AddressResult {
     name: string;
 }
 
+// @public
+export function aesGcmOpen(key: Uint8Array, sealed: Uint8Array, aad?: Uint8Array): Uint8Array;
+
+// @public
+export function aesGcmSeal(key: Uint8Array, plaintext: Uint8Array, aad?: Uint8Array): Uint8Array;
+
+// @public
+export const ANY_DELEGATE: "0x0000000000000000000000000000000000000a11";
+
 // @public (undocumented)
 export interface ApprovalChange {
     amount: string;
@@ -88,6 +97,53 @@ export interface ApprovalChange {
 
 // @public
 export const ARBITRUM_TOKENS: TokenListEntry[];
+
+// @public
+export function assertSolanaCluster(rpc: SolanaPaymentRpc, network: string): Promise<void>;
+
+// @public
+export function assertTrustedChannelProgram(rpc: SolanaPaymentRpc, cluster: string, override?: TrustedChannelProgram): Promise<TrustedChannelProgram>;
+
+// @public
+export function associatedTokenAddress(owner: string, mint: string, tokenProgram: string): string;
+
+// @public
+export type AtomicityRequirement = "required" | "preferred" | "any";
+
+// @public (undocumented)
+export interface Authorization {
+    // (undocumented)
+    expiresAt: number;
+    // (undocumented)
+    grants: Grant[];
+    // (undocumented)
+    label?: string;
+    // (undocumented)
+    notBefore?: number;
+    // (undocumented)
+    principal: string;
+    // (undocumented)
+    version: 1;
+}
+
+// @public (undocumented)
+export interface AuthorizationManagers {
+    // (undocumented)
+    evm?: SessionKeyManager;
+    // (undocumented)
+    mppVoucher?: ChannelVoucherKeyManager;
+    // (undocumented)
+    solana?: SolanaSessionKeyManager;
+}
+
+// @public (undocumented)
+export type AuthorizationValidation = {
+    ok: true;
+    authorization: Authorization;
+} | {
+    ok: false;
+    reason: string;
+};
 
 // @public (undocumented)
 export const AUTO_RECONNECT_TIMEOUT_MS: number;
@@ -155,16 +211,75 @@ export interface BatchCall {
     value?: string;
 }
 
+// @public (undocumented)
+export interface BoundChannel {
+    // (undocumented)
+    channelId: string;
+    // (undocumented)
+    deposit: bigint;
+    maxCumulative: bigint;
+    // (undocumented)
+    openSlot: bigint;
+    // (undocumented)
+    salt: bigint;
+}
+
+// @public
+export function buildApproveDelegateTransaction(a: SplDelegateApproval): Uint8Array;
+
 // @public
 export function buildCallData(calls: Call[], version?: UserOperationVersion): Hex;
 
 // @public
+export function buildDelegation(input: BuildDelegationInput): FrameworkDelegation;
+
+// @public (undocumented)
+export interface BuildDelegationInput {
+    // (undocumented)
+    chainId: number;
+    delegate: `0x${string}`;
+    delegator: `0x${string}`;
+    forbiddenMethods?: readonly string[];
+    salt?: bigint;
+    // (undocumented)
+    scope: SessionKeyScope;
+}
+
+// @public
+export function buildOpenChannelTransaction(input: OpenChannelTransaction): Uint8Array;
+
+// @public
+export function buildRequestCloseChannelTransaction(input: RequestCloseChannelTransaction): Uint8Array;
+
+// @public
+export function buildRevokeDelegateTransaction(a: Omit<SplDelegateApproval, "delegate" | "amount" | "decimals">): Uint8Array;
+
+// @public
+export function buildSealChannelTransaction(input: SealChannelTransaction): Uint8Array;
+
+// @public
+export function buildSplTransferTransaction(p: SplTransferPayment): Uint8Array;
+
+// @public
+export function buildTopUpChannelTransaction(input: TopUpChannelTransaction): Uint8Array;
+
+// @public
 export function buildUserOperation(params: Partial<UserOperation>): UserOperation;
+
+// @public
+export function buildWithdrawPayerChannelTransaction(input: WithdrawPayerChannelTransaction): Uint8Array;
 
 // @public (undocumented)
 export interface BundlerClient {
     apiKey?: string;
     url: string;
+}
+
+// @public
+export interface Caip10Account {
+    address: string;
+    chainId: string;
+    namespace: string;
 }
 
 // @public
@@ -216,6 +331,16 @@ export interface CapabilityQueryable {
 }
 
 // @public
+export interface CaveatOptions {
+    delegate: `0x${string}`;
+    delegator: `0x${string}`;
+    forbiddenMethods?: readonly string[];
+}
+
+// @public (undocumented)
+export function caveatsFromScope(scope: SessionKeyScope, chainId: number, options: CaveatOptions): FrameworkCaveat[];
+
+// @public
 export interface ChainFeeEstimator {
     chainId: string;
     estimateFees(rpcUrl: string, config?: Partial<FeeEstimationConfig>): Promise<FeeValues>;
@@ -236,10 +361,10 @@ export interface ChainInfo {
     name: string;
 }
 
-// Warning: (ae-forgotten-export) The symbol "ChainInfo$1" needs to be exported by the entry point index.d.ts
+// Warning: (ae-forgotten-export) The symbol "ChainInfo_2" needs to be exported by the entry point index.d.ts
 //
 // @public (undocumented)
-export const CHAINS: Record<number, ChainInfo$1>;
+export const CHAINS: Record<number, ChainInfo_2>;
 
 // @public
 export interface ChainSession {
@@ -270,6 +395,128 @@ export interface ChannelCapability {
     supportsRichText: boolean;
 }
 
+// @public (undocumented)
+export interface ChannelMintAccount {
+    // (undocumented)
+    address: string;
+    // (undocumented)
+    data: Uint8Array;
+    // (undocumented)
+    owner: string;
+}
+
+// @public (undocumented)
+export interface ChannelPdaInput {
+    // (undocumented)
+    authorizedSigner: string;
+    // (undocumented)
+    mint: string;
+    // (undocumented)
+    openSlot: bigint;
+    // (undocumented)
+    payee: string;
+    // (undocumented)
+    payer: string;
+    // (undocumented)
+    programAddress?: string;
+    // (undocumented)
+    salt: bigint;
+}
+
+// @public (undocumented)
+export interface ChannelSettlementExpected {
+    // (undocumented)
+    afterForcedClose?: boolean;
+    // (undocumented)
+    channelId: string;
+    // (undocumented)
+    channelProgram: string;
+    // (undocumented)
+    cluster: string;
+    // (undocumented)
+    expectedSettled: bigint | string;
+}
+
+// @public (undocumented)
+export interface ChannelVoucher {
+    // (undocumented)
+    channelId: string;
+    // (undocumented)
+    cumulativeAmount: bigint;
+    // (undocumented)
+    expiresAt: bigint;
+}
+
+// @public (undocumented)
+export interface ChannelVoucherKeyConfig {
+    channelProgramOverrides?: Readonly<Record<string, string>>;
+    // (undocumented)
+    encryptionKey: string;
+    // (undocumented)
+    pbkdf2Iterations?: number;
+    unsafeAllowWeakKdf?: boolean;
+}
+
+// @public (undocumented)
+export interface ChannelVoucherKeyInfo {
+    // (undocumented)
+    address: string;
+    // (undocumented)
+    channel: BoundChannel | null;
+    // (undocumented)
+    createdAt: number;
+    // (undocumented)
+    id: string;
+    // (undocumented)
+    lastCumulative: bigint;
+    // (undocumented)
+    policy: ChannelVoucherPolicy;
+    // (undocumented)
+    status: ChannelVoucherKeyStatus;
+}
+
+// @public (undocumented)
+export class ChannelVoucherKeyManager {
+    constructor(config: ChannelVoucherKeyConfig, adapter?: StorageAdapter);
+    // (undocumented)
+    bindChannel(id: string, binding: Omit<BoundChannel, "maxCumulative">): Promise<ChannelVoucherKeyInfo>;
+    // (undocumented)
+    create(policy: ChannelVoucherPolicy): Promise<ChannelVoucherKeyInfo>;
+    // (undocumented)
+    list(): Promise<ChannelVoucherKeyInfo[]>;
+    // (undocumented)
+    revoke(id: string): Promise<void>;
+    // (undocumented)
+    signVoucher(id: string, input: {
+        channelId: string;
+        units: bigint;
+    }): Promise<SignedChannelVoucher>;
+}
+
+// @public (undocumented)
+export type ChannelVoucherKeyStatus = "active" | "revoked" | "expired";
+
+// @public (undocumented)
+export interface ChannelVoucherPolicy {
+    // (undocumented)
+    channelProgram: string;
+    // (undocumented)
+    cluster: string;
+    expiry: number;
+    // (undocumented)
+    maxCumulative: bigint;
+    // (undocumented)
+    maxDelta: bigint;
+    // (undocumented)
+    mint: string;
+    // (undocumented)
+    payee: string;
+    // (undocumented)
+    payer: string;
+    // (undocumented)
+    pricePerUnit: bigint;
+}
+
 // @public
 export function chooseExecutionStrategy(capabilities: AccountCapabilities, callCount: number): ExecutionStrategy;
 
@@ -284,6 +531,58 @@ export function compareSimulationVsActual(simulation: SimulationResult, actualSt
     match: boolean;
     discrepancies?: string[];
 };
+
+// @public (undocumented)
+export interface CompiledMppSession {
+    // (undocumented)
+    client: CompiledMppSessionPolicy;
+    // (undocumented)
+    voucher: ChannelVoucherPolicy;
+}
+
+// @public (undocumented)
+export interface CompiledMppSessionPolicy {
+    // (undocumented)
+    amount: bigint;
+    // (undocumented)
+    deposit: bigint;
+    // (undocumented)
+    expiresAt: number;
+    // (undocumented)
+    maxCumulative: bigint;
+    // (undocumented)
+    maxDelta: bigint;
+    // (undocumented)
+    minimumGracePeriodSeconds?: number;
+    mint: string;
+    // (undocumented)
+    recipient: string;
+}
+
+// @public (undocumented)
+export function compileEvmSessionScope(value: Authorization, chainId: number, options?: EvmCompileOptions): CompileResult<SessionKeyScope>;
+
+// @public (undocumented)
+export function compileMppSession(value: Authorization, cluster: string, context: MppSessionCompileContext, options?: CompileOptions): CompileResult<CompiledMppSession>;
+
+// @public (undocumented)
+export interface CompileOptions {
+    // (undocumented)
+    requireOnChain?: boolean;
+}
+
+// @public (undocumented)
+export type CompileResult<T> = {
+    ok: true;
+    scope: T;
+    enforcement: "on-chain" | "device";
+} | {
+    ok: false;
+    reason: string;
+};
+
+// @public (undocumented)
+export function compileSolanaSessionScope(value: Authorization, cluster: string, options?: CompileOptions): CompileResult<SolanaSessionKeyScope>;
 
 // @public (undocumented)
 export const CONNECTOR_ERROR_MESSAGES: {
@@ -350,7 +649,7 @@ export class ConnectorManager {
         params: unknown[];
     }): Promise<unknown>;
     // (undocumented)
-    sendCalls(_session: UniversalWalletSession, calls: BatchCall[], chainId?: string): Promise<string>;
+    sendCalls(_session: UniversalWalletSession, calls: BatchCall[], chainId?: string, options?: SendCallsOptions): Promise<string>;
     // (undocumented)
     sendTransaction(input: unknown): Promise<unknown>;
     // (undocumented)
@@ -480,6 +779,105 @@ export const DEFAULT_VERIFICATION_GAS_LIMIT = 100000n;
 // @public
 export const DEFAULT_XRPL_NETWORK = "xrpl:0";
 
+// @public
+export function delegateAccount(input: DelegateAccountInput): Promise<SentDelegation>;
+
+// @public (undocumented)
+export interface DelegateAccountInput extends Omit<PrepareDelegationInput, "sender"> {
+    // (undocumented)
+    connector: Pick<UniversalConnector, "sendDelegation">;
+    // (undocumented)
+    session: UniversalWalletSession;
+}
+
+// @public
+export const DELEGATION_FRAMEWORK: {
+    readonly version: "1.3.0";
+    readonly delegationManager: "0xdb9B1e94B5b69Df7e401DDbedE43491141047dB3";
+    readonly eip7702StatelessDeleGator: "0x63c0c19a282a1B52b07dD5a65b58948A07DAE32B";
+    readonly enforcers: {
+        readonly allowedCalldata: "0xc2b0d624c1c4319760C96503BA27C347F3260f55";
+        readonly allowedMethods: "0x2c21fD0Cb9DC8445CB3fb0DC5E7Bb0Aca01842B5";
+        readonly allowedTargets: "0x7F20f61b1f09b08D970938F6fa563634d65c4EeB";
+        readonly erc20TransferAmount: "0xf100b0819427117EcF76Ed94B358B1A5b5C6D2Fc";
+        readonly erc20PeriodTransfer: "0x474e3Ae7E169e940607cC624Da8A15Eb120139aB";
+        readonly limitedCalls: "0x04658B29F6b82ed55274221a06Fc97D318E25416";
+        readonly nativeTokenTransferAmount: "0xF71af580b9c3078fbc2BBF16FbB8EEd82b330320";
+        readonly nativeTokenPeriodTransfer: "0x9BC0FAf4Aca5AE429F4c06aEEaC517520CB16BD9";
+        readonly redeemer: "0xE144b0b2618071B4E56f746313528a669c7E65c5";
+        readonly timestamp: "0x1046bb45C8d673d4ea75321280DB34899413c069";
+        readonly valueLte: "0x92Bf12322527cAA612fd31a0e810472BBB106A8F";
+    };
+};
+
+// @public
+export const DELEGATION_FRAMEWORK_CHAIN_IDS: readonly number[];
+
+// @public
+export const DELEGATION_PREFIX = "0xef0100";
+
+// @public
+export interface DelegationAuthorizationRequest {
+    account: `0x${string}`;
+    // (undocumented)
+    address: `0x${string}`;
+    // (undocumented)
+    chainId: string;
+    nonce: `0x${string}`;
+}
+
+// @public
+export function delegationHash(delegation: FrameworkDelegation): `0x${string}`;
+
+// @public
+export function delegationSigningDigest(delegation: FrameworkDelegation): `0x${string}`;
+
+// @public (undocumented)
+export interface DelegationStatus {
+    delegate: `0x${string}` | null;
+    delegated: boolean | null;
+}
+
+// @public
+export function delegationTypedData(delegation: FrameworkDelegation): {
+    domain: {
+        name: string;
+        version: string;
+        chainId: number;
+        verifyingContract: "0xdb9B1e94B5b69Df7e401DDbedE43491141047dB3";
+    };
+    types: {
+        Delegation: {
+            name: string;
+            type: string;
+        }[];
+        Caveat: {
+            name: string;
+            type: string;
+        }[];
+    };
+    primaryType: "Delegation";
+    message: {
+        delegate: `0x${string}`;
+        delegator: `0x${string}`;
+        authority: `0x${string}`;
+        caveats: {
+            enforcer: `0x${string}`;
+            terms: `0x${string}`;
+        }[];
+        salt: string;
+    };
+};
+
+// @public
+export function deriveChannelPda(input: ChannelPdaInput): {
+    channelId: string;
+    bump: number;
+};
+
+// @public (undocumented)
+export function describeTimeline(timeline: PaymentTimeline): PaymentDisplay;
+
 // @public (undocumented)
 export function detectPlatform(): Platform;
 
@@ -488,11 +886,23 @@ export function detectTokenInfo(address: string, chainId: number, rpcUrl: string
     skipCache?: boolean;
 }): Promise<TokenListEntry>;
 
+// @public
+export type Duration = {
+    known: true;
+    ms: number;
+} | {
+    known: false;
+    reason: string;
+};
+
 // @public (undocumented)
 export const EIP155_ARBITRUM = "eip155:42161";
 
 // @public (undocumented)
 export const EIP155_BASE = "eip155:8453";
+
+// @public (undocumented)
+export const EIP155_BASE_SEPOLIA = "eip155:84532";
 
 // @public (undocumented)
 export const EIP155_HOLESKY = "eip155:17000";
@@ -506,8 +916,37 @@ export const EIP155_OPTIMISM = "eip155:10";
 // @public (undocumented)
 export const EIP155_POLYGON = "eip155:137";
 
+// @public
+export const EIP155_PUBLIC_RPC_URLS: Readonly<Record<string, readonly string[]>>;
+
 // @public (undocumented)
 export const EIP155_SEPOLIA = "eip155:11155111";
+
+// @public
+export function eip155Reference(chainId: string): number | null;
+
+// @public (undocumented)
+export interface Eip3009SettlementExpected {
+    // (undocumented)
+    amount: bigint | string;
+    // (undocumented)
+    chainId: string;
+    // (undocumented)
+    from: string;
+    // (undocumented)
+    minConfirmations?: number;
+    // (undocumented)
+    nonce: string;
+    // (undocumented)
+    to: string;
+    // (undocumented)
+    token: string;
+    // (undocumented)
+    txHash: string;
+}
+
+// @public
+export function encodeChannelVoucher(voucher: ChannelVoucher): Uint8Array;
 
 // @public
 export function encodeGasFees(maxPriorityFeePerGas: bigint, maxFeePerGas: bigint): Hex;
@@ -516,12 +955,25 @@ export function encodeGasFees(maxPriorityFeePerGas: bigint, maxFeePerGas: bigint
 export function encodeGasLimits(verificationGasLimit: bigint, callGasLimit: bigint): Hex;
 
 // @public
+export function encodePermissionContext(delegations: readonly FrameworkDelegation[]): `0x${string}`;
+
+// @public
+export function encodeRedeemDelegations(delegation: FrameworkDelegation, execution: FrameworkExecution): `0x${string}`;
+
+// @public
+export function encodeRedeemDelegationsWithContext(permissionContext: `0x${string}`, executionCallData: `0x${string}`): `0x${string}`;
+
+// @public
+export function encodeSingleExecution(execution: FrameworkExecution): `0x${string}`;
+
+// @public
 export interface EncryptedKeyPair {
     algorithm?: "aes-256-gcm" | "legacy-ctr-hmac";
     // (undocumented)
     encryptedPrivateKey: string;
     // (undocumented)
     iv: string;
+    kdfIterations?: number;
     // (undocumented)
     publicKey: `0x${string}`;
     // (undocumented)
@@ -532,6 +984,9 @@ export interface EncryptedKeyPair {
 export function encryptPrivateKey(privateKeyHex: `0x${string}`, password: string, salt?: Uint8Array, iterations?: number, publicKeyHex?: `0x${string}`, options?: {
     unsafeAllowWeakKdf?: boolean;
 }): EncryptedKeyPair;
+
+// @public
+export function endToEnd(timeline: PaymentTimeline): Duration;
 
 // @public
 export class ENSProvider implements ResolverProvider {
@@ -716,18 +1171,21 @@ export class ERC20TokenHelper {
         from: `0x${string}`;
         data: `0x${string}`;
         value: "0x0";
+        chainId: number;
     }>;
     static buildTransferFromTx(params: ERC20TransferFromTxParams, decimals: number): Promise<{
         to: `0x${string}`;
         from: `0x${string}`;
         data: `0x${string}`;
         value: "0x0";
+        chainId: number;
     }>;
     static buildTransferTx(params: ERC20TransferTxParams, decimals: number): Promise<{
         to: `0x${string}`;
         from: `0x${string}`;
         data: `0x${string}`;
         value: "0x0";
+        chainId: number;
     }>;
     static formatRawAmount(token: TokenConfig, rawAmount: bigint, options?: ERC20CallOptions): Promise<string>;
     static getAllowance(token: TokenConfig, owner: `0x${string}`, spender: `0x${string}`, options?: ERC20CallOptions): Promise<bigint>;
@@ -776,6 +1234,8 @@ export class EthCallProvider implements SimulationProvider {
     isAvailable(_chainId: number): boolean;
     // (undocumented)
     readonly name: SimulationProviderName;
+    // (undocumented)
+    get rpcUrl(): string | undefined;
     simulate(tx: TransactionDescriptor, from: `0x${string}`, options?: {
         origin?: string;
         rpcUrl?: string;
@@ -786,6 +1246,30 @@ export class EthCallProvider implements SimulationProvider {
 
 // @public
 export const ETHEREUM_MAINNET_TOKENS: TokenListEntry[];
+
+// @public (undocumented)
+export function evaluateSpend(value: Authorization, request: SpendRequest): SpendVerdict;
+
+// @public (undocumented)
+export interface EvmCompileOptions extends CompileOptions {
+    // (undocumented)
+    mode?: "offchain" | "eip7702";
+}
+
+// @public (undocumented)
+export interface ExecutionPlan {
+    atomic: boolean;
+    reason: string;
+    sponsored: boolean;
+    strategy: ExecutionStrategy | "refuse";
+}
+
+// @public
+export interface ExecutionRequirements {
+    // (undocumented)
+    atomicity?: AtomicityRequirement;
+    sponsorship?: AtomicityRequirement;
+}
 
 // @public (undocumented)
 export type ExecutionStrategy = "atomic-batch" | "sequential";
@@ -849,7 +1333,44 @@ export interface FeeValuesLegacy {
 }
 
 // @public
+export function formatSol(lamports: bigint): string;
+
+// @public
 export function formatUnits(amount: bigint, decimals: number): string;
+
+// @public (undocumented)
+export interface FrameworkCaveat {
+    args: `0x${string}`;
+    // (undocumented)
+    enforcer: `0x${string}`;
+    // (undocumented)
+    terms: `0x${string}`;
+}
+
+// @public (undocumented)
+export interface FrameworkDelegation {
+    // (undocumented)
+    authority: `0x${string}`;
+    // (undocumented)
+    caveats: FrameworkCaveat[];
+    chainId: number;
+    // (undocumented)
+    delegate: `0x${string}`;
+    // (undocumented)
+    delegator: `0x${string}`;
+    // (undocumented)
+    salt: bigint;
+    signature: `0x${string}`;
+}
+
+// @public (undocumented)
+export interface FrameworkExecution {
+    // (undocumented)
+    callData: `0x${string}`;
+    // (undocumented)
+    target: `0x${string}`;
+    value: bigint;
+}
 
 // @public (undocumented)
 export interface GasInfo {
@@ -884,6 +1405,12 @@ export function getGasPrice(rpcUrl: string): Promise<bigint>;
 export function getLatestBaseFee(rpcUrl: string): Promise<bigint | null>;
 
 // @public (undocumented)
+export function getLatestBlockhash(endpoint: string): Promise<{
+    blockhash: string;
+    lastValidBlockHeight: number;
+}>;
+
+// @public (undocumented)
 export function getMethodsFromNamespaces(namespaces: Record<Namespace, SessionNamespace>): string[];
 
 // @public
@@ -899,6 +1426,46 @@ export function getPermissions(provider: {
 
 // @public
 export function getRpcUrl(chainId: string, fallback?: string): string | undefined;
+
+// @public
+export function getSignatureStatus(endpoint: string, signature: string): Promise<{
+    status: SolanaConfirmationStatus;
+    error: string | null;
+}>;
+
+// @public (undocumented)
+export function getSolanaBalance(endpoint: string, address: string): Promise<SolanaBalance>;
+
+// @public (undocumented)
+export interface Grant {
+    // (undocumented)
+    asset: string;
+    // (undocumented)
+    maxCount?: number;
+    // (undocumented)
+    maxPerPayment: bigint;
+    // (undocumented)
+    maxTotal: bigint;
+    // (undocumented)
+    period?: GrantPeriod;
+    // (undocumented)
+    rails: Rail[];
+    // (undocumented)
+    recipients: string[];
+}
+
+// @public (undocumented)
+export interface GrantPeriod {
+    // (undocumented)
+    amount: bigint;
+    // (undocumented)
+    seconds: number;
+    // (undocumented)
+    start: number;
+}
+
+// @public
+export function hashSolanaTransactionMessage(transaction: string): string;
 
 // @public (undocumented)
 export function hashUserOperation(userOp: UserOperation, entryPoint: Address, chainId: number | bigint): Hex;
@@ -961,16 +1528,31 @@ export function isAAError(e: unknown): e is AccountAbstractionError;
 export function isBurnAddress(address: string): boolean;
 
 // @public
+export function isChecksumAddress(address: string): boolean;
+
+// @public
 export function isERC20TokenError(e: unknown): e is ERC20TokenError;
+
+// @public
+export function isEvmAddress(value: string): boolean;
 
 // @public (undocumented)
 export function isFeeEstimationError(e: unknown, code?: FeeEstimationErrorCode): e is FeeEstimationError;
 
-// @public (undocumented)
+// @public
 export function isMobileBrowser(): boolean;
+
+// @public
+export function isMobileDevice(): boolean;
+
+// @public
+export function isReactNative(): boolean;
 
 // @public (undocumented)
 export function isSessionExpired(session: UniversalWalletSession, now: Date): boolean;
+
+// @public
+export function isSettled(timeline: PaymentTimeline): boolean;
 
 // @public
 export function isValidAddress(address: string, chainNamespace?: string): boolean;
@@ -980,6 +1562,35 @@ export function isWalletError(e: unknown, code?: WalletErrorCode): e is WalletEr
 
 // @public
 export function isZeroAddress(address: string): boolean;
+
+// @public
+export const LAMPORTS_PER_SOL = 1000000000n;
+
+// @public
+export function latestStage(timeline: PaymentTimeline): PaymentStage | null;
+
+// @public
+export function listAuthorizations(managers: AuthorizationManagers): Promise<ListedAuthorization[]>;
+
+// Warning: (ae-forgotten-export) The symbol "ListedAuthorizationBase" needs to be exported by the entry point index.d.ts
+//
+// @public (undocumented)
+export type ListedAuthorization = (ListedAuthorizationBase & {
+    enforcer: "evm-session";
+    raw: SessionKeyInfo;
+}) | (ListedAuthorizationBase & {
+    enforcer: "solana-session";
+    raw: SolanaSessionKeyInfo;
+}) | (ListedAuthorizationBase & {
+    enforcer: "mpp-voucher";
+    raw: ChannelVoucherKeyInfo;
+});
+
+// @public (undocumented)
+export type ListedAuthorizationFlag = "unrestricted-recipient-legacy" | "not-expressible";
+
+// @public (undocumented)
+export type ListedAuthorizationStatus = "active" | "pending" | "revoked" | "expired";
 
 // @public (undocumented)
 export class LocalStorageAdapter implements StorageAdapter {
@@ -1051,6 +1662,20 @@ export class MemoryStorageAdapter implements StorageAdapter {
     remove(key: string): Promise<void>;
     // (undocumented)
     set<T>(key: string, value: T): Promise<void>;
+}
+
+// @public (undocumented)
+export interface MppSessionCompileContext {
+    // (undocumented)
+    channelProgram: string;
+    // (undocumented)
+    deposit: bigint;
+    // (undocumented)
+    minimumGracePeriodSeconds?: number;
+    // (undocumented)
+    payer: string;
+    // (undocumented)
+    pricePerUnit: bigint;
 }
 
 // @public (undocumented)
@@ -1132,6 +1757,9 @@ export interface NamespaceCapabilities {
 }
 
 // @public
+export function namespaceOf(value: string): string | null;
+
+// @public
 export interface NativeTokenPriceOptions {
     maxAgeSeconds?: number;
 }
@@ -1170,6 +1798,9 @@ export class NoopStorageAdapter implements StorageAdapter {
     // (undocumented)
     set<T>(_key: string, _value: T): Promise<void>;
 }
+
+// @public
+export function normalizeEip155ChainId(value: unknown): string | undefined;
 
 // @public
 export function normalizeEip5792Capabilities(raw: unknown): Record<string, WalletCapabilities>;
@@ -1323,6 +1954,20 @@ export interface NotifierOptions {
     };
 }
 
+// @public (undocumented)
+export interface OpenChannelTransaction extends ChannelPdaInput {
+    // (undocumented)
+    deposit: bigint;
+    // (undocumented)
+    feePayer: string;
+    // (undocumented)
+    gracePeriod: number;
+    // (undocumented)
+    mintAccount: ChannelMintAccount;
+    // (undocumented)
+    recentBlockhash: string;
+}
+
 // @public
 export const OPTIMISM_TOKENS: TokenListEntry[];
 
@@ -1330,13 +1975,76 @@ export const OPTIMISM_TOKENS: TokenListEntry[];
 export function parseBigInt(value: string): bigint;
 
 // @public
+export function parseCaip10(value: string): Caip10Account | null;
+
+// @public
 export function parseChainId(chainId: string): {
     namespace: string;
     reference: string;
 };
 
+// @public (undocumented)
+export interface ParsedSolanaTransaction {
+    // (undocumented)
+    accountKeys: string[];
+    // (undocumented)
+    instructions: {
+        program: string;
+        accounts: string[];
+        data: Uint8Array;
+    }[];
+    message: Uint8Array;
+    // (undocumented)
+    numReadonlySigned: number;
+    // (undocumented)
+    numReadonlyUnsigned: number;
+    // (undocumented)
+    numRequiredSignatures: number;
+    // (undocumented)
+    recentBlockhash: string;
+    // (undocumented)
+    signatures: Uint8Array[];
+    // (undocumented)
+    version: 0;
+}
+
+// @public
+export function parseSol(amount: string): bigint;
+
+// @public
+export function parseSolanaTransaction(wire: Uint8Array): ParsedSolanaTransaction;
+
 // @public
 export function parseUnits(amount: string | number | bigint, decimals: number): bigint;
+
+// @public (undocumented)
+export class PassphraseCancelledError extends Error {
+    constructor(message?: string);
+    // (undocumented)
+    readonly code = "passphrase_cancelled";
+}
+
+// @public (undocumented)
+export class PassphraseGate {
+    cancel(reason?: string): void;
+    expect(intent: PassphraseIntent): void;
+    forget(reason?: string): void;
+    getSnapshot: () => PassphraseRequest | null;
+    get isUnlocked(): boolean;
+    readonly request: () => Promise<string>;
+    submit(passphrase: string): void;
+    // (undocumented)
+    subscribe: (listener: () => void) => (() => void);
+}
+
+// @public
+export type PassphraseIntent = "create" | "unlock";
+
+// @public (undocumented)
+export interface PassphraseRequest {
+    intent: PassphraseIntent;
+    previousError: string | null;
+}
 
 // @public (undocumented)
 export interface Paymaster {
@@ -1378,11 +2086,14 @@ export interface PaymasterRequestOptions {
 export class PaymasterService implements Paymaster {
     constructor(config: PaymasterServiceConfig);
     getPaymasterData(userOp: Partial<UserOperation>, request?: PaymasterRequestOptions): Promise<PaymasterData>;
+    getPaymasterFinalData(userOp: Partial<UserOperation>, request: PaymasterRequestOptions, stub: PaymasterStubData, estimatedVerificationGas?: bigint): Promise<PaymasterData>;
+    // Warning: (ae-forgotten-export) The symbol "PaymasterStubData" needs to be exported by the entry point index.d.ts
+    getPaymasterStubData(userOp: Partial<UserOperation>, request: PaymasterRequestOptions): Promise<PaymasterStubData>;
     isSponsored(userOp: Partial<UserOperation>): Promise<boolean>;
     get sponsorInfo(): string | null;
 }
 
-// @public
+// @public (undocumented)
 export interface PaymasterServiceConfig {
     apiKey?: string;
     policy?: {
@@ -1396,6 +2107,40 @@ export interface PaymasterServiceConfig {
 
 // @public (undocumented)
 export type PaymasterType = "verifying" | "token" | "sponsor" | "custom";
+
+// @public
+export const PAYMENT_STAGES: readonly PaymentStage[];
+
+// @public (undocumented)
+export interface PaymentDisplay {
+    detail: string;
+    stage: PaymentStage | null;
+    // (undocumented)
+    state: PaymentDisplayState;
+}
+
+// @public
+export type PaymentDisplayState = "not-started" | "in-progress" | "complete" | "failed";
+
+// @public (undocumented)
+export interface PaymentFailure {
+    // (undocumented)
+    at: number;
+    // (undocumented)
+    reason: string;
+    stage: PaymentStage;
+}
+
+// @public
+export type PaymentStage = "authorized" | "submitted" | "included" | "confirmed" | "settled";
+
+// @public (undocumented)
+export interface PaymentTimeline {
+    // (undocumented)
+    readonly failure: PaymentFailure | null;
+    // (undocumented)
+    readonly stages: Readonly<Partial<Record<PaymentStage, StageRecord>>>;
+}
 
 // @public (undocumented)
 export interface PermissionsRequest {
@@ -1415,17 +2160,62 @@ export interface PersistedSessionData {
     walletSession: UniversalWalletSession;
 }
 
+// @public
+export function planExecution(capabilities: AccountCapabilities, callCount: number, requirements?: AtomicityRequirement | ExecutionRequirements): ExecutionPlan;
+
 // @public (undocumented)
-export type Platform = "desktop-web" | "mobile-web" | "in-app-browser";
+export type Platform = "desktop-web" | "mobile-web" | "in-app-browser" | "native-ios" | "native-android";
 
 // @public
 export const POLYGON_TOKENS: TokenListEntry[];
+
+// @public
+export interface PreparedDelegationAuthorization extends DelegationAuthorizationRequest {
+    transactionNonce?: `0x${string}`;
+}
+
+// @public
+export function prepareDelegationAuthorization(input: PrepareDelegationInput): Promise<PreparedDelegationAuthorization>;
+
+// @public (undocumented)
+export interface PrepareDelegationInput {
+    account: `0x${string}`;
+    allowlist: readonly string[];
+    chainId: string;
+    delegate: `0x${string}`;
+    getTransactionCount: (account: `0x${string}`, blockTag: "pending") => Promise<unknown>;
+    sender: "self" | "relayer";
+}
+
+// @public (undocumented)
+export type Rail = "transfer" | "x402-exact" | "mpp-charge" | "mpp-session";
 
 // @public
 export function readAtomicSupport(entry: Record<string, unknown>): {
     supported: boolean;
     maxBatchSize?: number;
 };
+
+// @public
+export function readDelegation(code: unknown): DelegationStatus;
+
+// @public
+export function readMint(owner: string, data: Uint8Array): {
+    tokenProgram: string;
+    decimals: number;
+};
+
+// @public
+export function readTokenAccount(programOwner: string, data: Uint8Array): SplTokenAccount;
+
+// @public
+export function recordFailure(timeline: PaymentTimeline, stage: PaymentStage, reason: string, at: number): PaymentTimeline;
+
+// @public
+export function recordStage(timeline: PaymentTimeline, stage: PaymentStage, evidence: string, at: number): PaymentTimeline;
+
+// @public
+export function recoverTypedDataSigner(req: SessionKeyTypedDataRequest, signature: string): `0x${string}` | null;
 
 // @public (undocumented)
 export interface RefreshFeesOptions {
@@ -1437,12 +2227,29 @@ export interface RefreshFeesOptions {
 export function registerChainFeeEstimator(estimator: ChainFeeEstimator): void;
 
 // @public (undocumented)
+export interface RequestCloseChannelTransaction {
+    // (undocumented)
+    channelId: string;
+    // (undocumented)
+    feePayer: string;
+    // (undocumented)
+    payer: string;
+    // (undocumented)
+    programAddress?: string;
+    // (undocumented)
+    recentBlockhash: string;
+}
+
+// @public (undocumented)
 export function requestPermissions(provider: {
     request: (args: {
         method: string;
         params?: unknown[];
     }) => Promise<unknown>;
 }): Promise<WalletPermission[]>;
+
+// @public
+export function requireEip155ChainId(chainId: string): string;
 
 // @public
 export class ResolutionError extends Error {
@@ -1474,6 +2281,22 @@ export interface ResolverProvider {
     supportsName(name: string): boolean;
 }
 
+// @public
+export const REVOKE_DELEGATE = "0x0000000000000000000000000000000000000000";
+
+// @public
+export function revokeDelegation(input: Omit<DelegateAccountInput, "delegate" | "allowlist">): Promise<SentDelegation>;
+
+// @public
+export function revokeListedAuthorization(managers: AuthorizationManagers, entry: ListedAuthorization): Promise<RevokeListedAuthorizationResult>;
+
+// @public (undocumented)
+export type RevokeListedAuthorizationResult = {
+    onChainRevocationRequired: false;
+} | {
+    onChainRevocationRequired: true;
+};
+
 // @public (undocumented)
 export interface RiskAssessment {
     level: RiskLevel;
@@ -1496,6 +2319,9 @@ export type RiskWarningCategory = "phishing" | "unlimited_approval" | "high_valu
 
 // @public (undocumented)
 export type RiskWarningSeverity = "low" | "medium" | "high" | "critical";
+
+// @public
+export const ROOT_AUTHORITY: "0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff";
 
 // @public (undocumented)
 export interface Route {
@@ -1615,9 +2441,33 @@ export interface ScopeCheckResult {
     valid: boolean;
 }
 
+// @public
+export function scopeRequestFrom(input: unknown): SessionScopeRequest | undefined;
+
+// @public (undocumented)
+export interface SealChannelTransaction {
+    // (undocumented)
+    channelId: string;
+    // (undocumented)
+    feePayer: string;
+    // (undocumented)
+    programAddress?: string;
+    // (undocumented)
+    recentBlockhash: string;
+}
+
+// @public
+export interface SelfDelegationRequest extends DelegationAuthorizationRequest {
+    transactionNonce: `0x${string}`;
+}
+
 // @public (undocumented)
 export interface SendCallsOptions {
     atomicRequired?: boolean;
+    paymasterService?: {
+        url: string;
+        context?: Record<string, unknown>;
+    };
 }
 
 // @public
@@ -1636,6 +2486,13 @@ export interface SendUserOpOptions {
     skipDeploy?: boolean;
 }
 
+// @public
+export interface SentDelegation {
+    // (undocumented)
+    authorization: SignedDelegationAuthorization;
+    hash: `0x${string}`;
+}
+
 // @public (undocumented)
 export const SESSION_ERROR_MESSAGES: Record<SessionErrorCode, string>;
 
@@ -1646,10 +2503,22 @@ export const SESSION_KEY_ERROR_MESSAGES: Record<SessionKeyErrorCode, string>;
 export const SESSION_TIMEOUT_MS: number;
 
 // @public
+export type SessionChange = {
+    type: "scope";
+    namespaces: Record<Namespace, SessionNamespace>;
+} | {
+    type: "expiry";
+    expiresAt: string | null;
+} | {
+    type: "revoked";
+    reason: "wallet" | "expired";
+};
+
+// @public
 export type SessionErrorCode = "no_active_session" | "chain_switch_rejected" | "chain_unsupported" | "fee_rpc_error" | "method_unsupported" | "invalid_chain";
 
 // @public
-export type SessionEvent = "sessionConnected" | "sessionDisconnected" | "chainChanged" | "chainSessionAdded" | "chainSessionRemoved" | "feesUpdated" | "accountsChanged";
+export type SessionEvent = "sessionConnected" | "sessionDisconnected" | "chainChanged" | "chainSessionAdded" | "chainSessionRemoved" | "feesUpdated" | "accountsChanged" | "sessionScopeChanged" | "sessionExpiryChanged" | "sessionRevoked";
 
 // @public (undocumented)
 export class SessionEventEmitter {
@@ -1699,7 +2568,26 @@ export interface SessionEventPayloads {
         connectorId: string;
         topic?: string;
     };
+    sessionExpiryChanged: {
+        bundle: ActiveSessionBundle;
+        expiresAt: string | null;
+    };
+    sessionRevoked: {
+        connectorId: string;
+        topic?: string;
+        sessionId: string;
+        reason: "wallet" | "expired" | "app" | "scope_emptied";
+    };
+    sessionScopeChanged: {
+        bundle: ActiveSessionBundle;
+        previousNamespaces: Record<string, SessionNamespace>;
+        namespaces: Record<string, SessionNamespace>;
+        rejectedChains: string[];
+    };
 }
+
+// @public
+export function sessionKeyAddress(publicKeyHex: `0x${string}`): `0x${string}`;
 
 // @public
 export interface SessionKeyBundle {
@@ -1719,9 +2607,11 @@ export type SessionKeyErrorCode = "session_key_not_found" | "session_key_expired
 
 // @public
 export interface SessionKeyInfo {
+    authorizationMessage?: string;
+    authorizationType?: SignedAuthorization["type"];
+    authorized?: boolean;
     // (undocumented)
     createdAt: number;
-    // (undocumented)
     expiresAt: number;
     // (undocumented)
     id: string;
@@ -1733,13 +2623,25 @@ export interface SessionKeyInfo {
     signerAddress: `0x${string}`;
     // (undocumented)
     status: SessionKeyStatus;
+    readonly usage?: Readonly<{
+        valueSpent: bigint;
+        tokenSpent: Readonly<Record<`0x${string}`, bigint>>;
+        txCount: number;
+    }>;
     // (undocumented)
     useCount: number;
 }
 
-// @public
+// @public (undocumented)
 export class SessionKeyManager {
     constructor(config?: SessionKeyManagerConfig, storageAdapter?: StorageAdapter);
+    attachDelegation(sessionId: string, delegation: FrameworkDelegation, signature: `0x${string}`): Promise<void>;
+    buildDelegationRedemption(sessionId: string, execution: FrameworkExecution): Promise<{
+        to: `0x${string}`;
+        value: "0x0";
+        data: `0x${string}`;
+        chainId: number;
+    }>;
     checkSessionScope(sessionId: string, tx: SessionKeyTransaction): Promise<ScopeCheckResult>;
     clearAll(): Promise<void>;
     createSessionKey(scope?: Partial<SessionKeyScope>, signerAddress?: `0x${string}`): Promise<SessionKeyInfo>;
@@ -1747,9 +2649,27 @@ export class SessionKeyManager {
     isStorageAvailable(): boolean;
     listActiveSessions(): Promise<SessionKeyInfo[]>;
     listSessions(): Promise<SessionKeyInfo[]>;
+    prepareDelegation(sessionId: string, chainId: number, salt?: bigint): Promise<FrameworkDelegation>;
     revokeSession(sessionId: string): Promise<void>;
     setAuthorization(sessionId: string, authorization: SignedAuthorization): Promise<void>;
+    signDelegationRedemption(sessionId: string, digest: `0x${string}`, outerTx: {
+        to?: string;
+        value?: string;
+        data?: string;
+        chainId?: number;
+        gas?: string;
+    }, execution: FrameworkExecution): Promise<`0x${string}`>;
+    signTransactionDelegationRedemption(sessionId: string, tx: TransactionRequest, outerTx: {
+        gas?: string;
+    }, execution: FrameworkExecution): Promise<`0x${string}`>;
+    signTransactionWithSessionKey(sessionId: string, tx: TransactionRequest): Promise<`0x${string}`>;
+    signTransactionWithVerifiedOffchainAuthorization(sessionId: string, buildExpectedMessage: (policy: SessionKeyInfo) => string, verify: OffchainAuthorizationVerifier, tx: TransactionRequest): Promise<`0x${string}`>;
+    signTypedDataWithSessionKey(sessionId: string, request: SessionKeyTypedDataRequest, rail: "x402-exact" | "mpp-charge"): Promise<`0x${string}`>;
+    signTypedDataWithVerifiedOffchainAuthorization(sessionId: string, buildExpectedMessage: (policy: SessionKeyInfo) => string, verify: OffchainAuthorizationVerifier, request: SessionKeyTypedDataRequest, rail: "x402-exact" | "mpp-charge"): Promise<`0x${string}`>;
     signWithSessionKey(sessionId: string, messageHash: `0x${string}`, tx?: SessionKeyTransaction): Promise<`0x${string}`>;
+    // Warning: (ae-forgotten-export) The symbol "OffchainAuthorizationVerifier" needs to be exported by the entry point index.d.ts
+    signWithVerifiedOffchainAuthorization(sessionId: string, buildExpectedMessage: (policy: SessionKeyInfo) => string, verify: OffchainAuthorizationVerifier, messageHash: `0x${string}`, tx?: SessionKeyTransaction): Promise<`0x${string}`>;
+    verifyOffchainAuthorization(sessionId: string, expectedMessage: string, verify: OffchainAuthorizationVerifier): Promise<boolean>;
 }
 
 // @public (undocumented)
@@ -1760,9 +2680,11 @@ export interface SessionKeyManagerConfig {
     encryptionKey?: string;
     encryptionSalt?: string;
     forbiddenMethods?: string[];
+    maxExpiryMs?: number;
     pbkdf2Iterations?: number;
     requireAllowedContracts?: boolean;
     storagePrefix?: string;
+    unsafeAllowUnauthorizedSigning?: boolean;
     unsafeAllowWeakKdf?: boolean;
 }
 
@@ -1775,10 +2697,14 @@ export interface SessionKeyPair {
 }
 
 // @public
+export type SessionKeyRail = "transfer" | "x402-exact" | "mpp-charge";
+
+// @public
 export interface SessionKeyScope {
     allowedChainIds?: number[];
     allowedContracts?: `0x${string}`[];
     allowedMethods?: string[];
+    allowedRecipients?: `0x${string}`[];
     expiry: number;
     maxGasPerTx?: bigint;
     maxTotalGas?: bigint;
@@ -1786,7 +2712,12 @@ export interface SessionKeyScope {
     maxTxCount?: number;
     maxValuePerTx?: bigint;
     mode: "offchain" | "eip7702" | "aa_module";
+    nativeTransfer?: "empty-calldata-to-recipients";
+    // Warning: (ae-forgotten-export) The symbol "SessionKeyPeriod" needs to be exported by the entry point index.d.ts
+    periodLimits?: Partial<Record<`0x${string}` | "native", SessionKeyPeriod>>;
+    rails: SessionKeyRail[];
     tokenAllowances?: Record<`0x${string}`, bigint>;
+    tokenMaxPerTx?: Record<`0x${string}`, bigint>;
 }
 
 // @public (undocumented)
@@ -1800,11 +2731,21 @@ export class SessionKeyStorage {
     incrementUsage(id: string, tx?: {
         value?: string;
         gas?: string;
+    }, tokenSpend?: {
+        tokenAddress: `0x${string}`;
+        amount: bigint;
     }): Promise<void>;
     // @internal
     incrementUsageUnlocked(id: string, tx?: {
         value?: string;
         gas?: string;
+    }, tokenSpend?: {
+        tokenAddress: `0x${string}`;
+        amount: bigint;
+    }, periodUsage?: {
+        asset: string;
+        periodIndex: number;
+        amount: bigint;
     }): Promise<void>;
     isAvailable(): boolean;
     loadAll(): Promise<StoredSessionKey[]>;
@@ -1831,6 +2772,28 @@ export interface SessionKeyTransaction {
 }
 
 // @public
+export interface SessionKeyTypedDataRequest {
+    // (undocumented)
+    domain: {
+        name: string;
+        version: string;
+        chainId: number;
+        verifyingContract: `0x${string}`;
+    };
+    // (undocumented)
+    message: {
+        from: `0x${string}`;
+        to: `0x${string}`;
+        value: string;
+        validAfter: string;
+        validBefore: string;
+        nonce: `0x${string}`;
+    };
+    // (undocumented)
+    primaryType: "TransferWithAuthorization";
+}
+
+// @public
 export class SessionManager extends SessionEventEmitter {
     constructor(connectorManager: ConnectorManager, config?: SessionManagerConfig);
     attach(session: UniversalWalletSession, chainId?: string): Promise<ActiveSessionBundle>;
@@ -1842,10 +2805,12 @@ export class SessionManager extends SessionEventEmitter {
     getActiveChainSession(): ChainSession | undefined;
     getAllActiveSessions(): ActiveSessionBundle[];
     getAllChainSessions(): ChainSession[];
+    getSession(sessionId: string): ActiveSessionBundle | null;
     getUserFeeOverrides(chainId: string): UserFeeOverrides[string] | undefined;
     refreshFees(chainId?: string, options?: RefreshFeesOptions): Promise<FeeValues | null>;
     registerConnector(connector: UniversalConnector, priority?: number): void;
     restoreFromPersistence(): Promise<boolean>;
+    revokeSession(sessionId: string): Promise<void>;
     setUserFeeOverrides(chainId: string, overrides: Partial<UserFeeOverrides[string]>): void;
     switchChain(chainId: string): Promise<void>;
     syncExternalChain(chainId: string): Promise<void>;
@@ -1890,6 +2855,17 @@ export class SessionPersistence {
     serializeBundle(bundle: ActiveSessionBundle): PersistedSessionData;
 }
 
+// @public
+export type SessionScopeNamespaceRequest = Pick<SessionNamespace, "chains" | "methods" | "events">;
+
+// @public
+export interface SessionScopeRequest {
+    // (undocumented)
+    optional?: Record<Namespace, SessionScopeNamespaceRequest>;
+    // (undocumented)
+    required?: Record<Namespace, SessionScopeNamespaceRequest>;
+}
+
 // @public (undocumented)
 export interface SessionStorage {
     // (undocumented)
@@ -1924,11 +2900,58 @@ export function setLogLevel(level: LogLevel): void;
 export function setLogSink(sink: ((level: LogLevel, ns: string, ...args: unknown[]) => void) | null): void;
 
 // @public
+export function setPlatformOverride(platform: Platform | null): void;
+
+// @public (undocumented)
+export interface SettlementRpc {
+    // (undocumented)
+    request<T = unknown>(method: string, params?: readonly unknown[]): Promise<T>;
+}
+
+// @public (undocumented)
+export type SettlementVerification = {
+    status: "verified";
+    blockNumber?: bigint;
+    slot?: bigint;
+} | {
+    status: "pending";
+} | {
+    status: "failed";
+    reason?: string;
+} | {
+    status: "mismatch";
+    reason: string;
+} | {
+    status: "unavailable";
+    reason: string;
+};
+
+// @public
 export interface SignedAuthorization {
     authorization?: `0x${string}`;
+    delegationChainId?: number;
+    message?: string;
     rawSignature?: `0x${string}`;
     signerAddress: `0x${string}`;
     type: "eip7702" | "offchain" | "aa_module";
+}
+
+// @public (undocumented)
+export interface SignedChannelVoucher {
+    // (undocumented)
+    signature: Uint8Array;
+    // (undocumented)
+    voucher: ChannelVoucher;
+}
+
+// @public (undocumented)
+export interface SignedDelegationAuthorization extends DelegationAuthorizationRequest {
+    // (undocumented)
+    r: `0x${string}`;
+    // (undocumented)
+    s: `0x${string}`;
+    // (undocumented)
+    yParity: 0 | 1;
 }
 
 // @public
@@ -1936,6 +2959,9 @@ export function signUserOperation(userOp: UserOperation, signer: (hash: Hex) => 
 
 // @public
 export function signUserOperationV06(userOp: UserOperation, signer: (hash: Hex) => Promise<Hex> | Hex, entryPoint: Address, chainId: number | bigint, signerMode?: "raw" | "eip191"): Promise<UserOperation>;
+
+// @public
+export function signVoucher(secretKey: Uint8Array, voucher: ChannelVoucher): Uint8Array;
 
 // @public
 export const SIMPLE_ACCOUNT_FACTORY: `0x${string}`;
@@ -1948,24 +2974,50 @@ export const SIMPLE_ACCOUNT_FACTORY_V07: Address;
 
 // @public (undocumented)
 export interface SimulationConfig {
+    autoSimulate?: boolean;
     defaultProvider?: SimulationProviderName;
     enabled?: boolean;
     rpcUrl?: string;
 }
 
 // @public
+export interface SimulationCoverage {
+    // (undocumented)
+    approvalChanges: boolean;
+    // (undocumented)
+    balanceChanges: boolean;
+    // (undocumented)
+    risk: boolean;
+}
+
+// @public
 export class SimulationManager {
     constructor(config?: SimulationConfig);
+    // (undocumented)
+    get autoSimulate(): boolean;
     get enabled(): boolean;
     isAvailable(chainId: number): boolean;
     registerProvider(name: SimulationProviderName, provider: SimulationProvider): void;
+    // (undocumented)
+    setAutoSimulate(value: boolean): void;
     setEnabled(enabled: boolean): void;
     simulate(tx: TransactionDescriptor, from: `0x${string}`, options?: {
         chainId?: number;
         origin?: string;
         rpcUrl?: string;
     }): Promise<SimulationResult>;
-    simulateERC20Transfer(token: TokenConfig, from: `0x${string}`, to: `0x${string}`, amount: string, chainId: number): Promise<SimulationResult>;
+    simulateERC20Transfer(token: TokenConfig | `0x${string}`, from: `0x${string}`, to: `0x${string}`, amount: string, chainId: number, decimals?: number, rpcUrl?: string): Promise<SimulationResult>;
+    simulateTransaction(tx: {
+        to: string;
+        data?: string;
+        value?: string;
+        gas?: string;
+        from?: string;
+    }, from: `0x${string}`, options?: {
+        chainId?: number;
+        origin?: string;
+        rpcUrl?: string;
+    }): Promise<SimulationResult>;
     unregisterProvider(name: SimulationProviderName): void;
 }
 
@@ -1989,6 +3041,7 @@ export interface SimulationResult {
     approvalChanges: ApprovalChange[];
     balanceChanges: BalanceChange[];
     changesDetected: boolean;
+    coverage?: SimulationCoverage;
     gasInfo?: GasInfo;
     provider: SimulationProviderName;
     raw?: unknown;
@@ -2000,6 +3053,9 @@ export interface SimulationResult {
 
 // @public (undocumented)
 export type SimulationStatus = "success" | "reverted" | "unavailable";
+
+// @public
+export const SINGLE_DEFAULT_MODE: `0x${string}`;
 
 // @public (undocumented)
 export interface SmartAccountConfig {
@@ -2064,14 +3120,268 @@ export class SNSProvider implements ResolverProvider {
     supportsName(name: string): boolean;
 }
 
+// @public
+export const SOLANA_CHANNEL_PROGRAM = "CHNLxYvVA28MJP9PrFuDXccuoGXAx7jBacfLEkahyGsX";
+
 // @public (undocumented)
 export const SOLANA_DEVNET = "solana:EtWTRABZaYq6iMfeYKouRu166VU2xqa1";
 
 // @public
 export const SOLANA_MAINNET = "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp";
 
+// @public
+export const SOLANA_PROGRAMS: {
+    readonly token: "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA";
+    readonly token2022: "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb";
+    readonly associatedToken: "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL";
+    readonly computeBudget: "ComputeBudget111111111111111111111111111111";
+    readonly memo: "MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr";
+    readonly lighthouse: "L2TExMFKdjpN9kozasaurPirfHy9P8sbXoAN1qA3S95";
+};
+
 // @public (undocumented)
 export const SOLANA_TESTNET = "solana:4uhcVJyU9pJkvQyS88uRDiswHXSCkY3z";
+
+// @public
+export const SOLANA_TRANSACTION_LIMIT = 1232;
+
+// @public (undocumented)
+export interface SolanaBalance {
+    exists: boolean;
+    lamports: bigint;
+    sol: string;
+}
+
+// @public (undocumented)
+export type SolanaConfirmationStatus = "processed" | "confirmed" | "finalized" | "failed" | "unknown";
+
+// @public
+export interface SolanaPaymentRpc {
+    getAccountInfo(address: string): Promise<{
+        owner: string;
+        data: Uint8Array;
+    } | null>;
+    getGenesisHash(): Promise<string>;
+    // (undocumented)
+    getLatestBlockhash(): Promise<string>;
+    sendTransaction?(transaction: string): Promise<string>;
+    simulateTransaction?(transaction: string): Promise<{
+        err: unknown;
+    }>;
+}
+
+// @public
+export function solanaPaymentRpc(url: string, send?: typeof fetch): SolanaPaymentRpc;
+
+// @public (undocumented)
+export class SolanaRpcError extends Error {
+    constructor(message: string, code?: number);
+    // (undocumented)
+    readonly code: number | undefined;
+}
+
+// @public (undocumented)
+export interface SolanaSessionKeyConfig {
+    encryptionKey: string;
+    maxExpiryMs?: number;
+    // (undocumented)
+    pbkdf2Iterations?: number;
+    unsafeAllowWeakKdf?: boolean;
+}
+
+// @public (undocumented)
+export interface SolanaSessionKeyInfo {
+    address: string;
+    // (undocumented)
+    createdAt: number;
+    // (undocumented)
+    decimals: number;
+    // (undocumented)
+    id: string;
+    // (undocumented)
+    owner: string;
+    // (undocumented)
+    scope: SolanaSessionKeyScope;
+    // (undocumented)
+    spent: bigint;
+    // (undocumented)
+    status: SolanaSessionKeyStatus;
+    tokenProgram: string;
+    // (undocumented)
+    useCount: number;
+}
+
+// @public (undocumented)
+export class SolanaSessionKeyManager {
+    constructor(config: SolanaSessionKeyConfig, adapter?: StorageAdapter);
+    attachApproval(id: string, signed: Uint8Array, recentBlockhash: string): Promise<string>;
+    createSessionKey(scope: SolanaSessionKeyScope, owner: string, rpc: SolanaPaymentRpc): Promise<SolanaSessionKeyInfo>;
+    // (undocumented)
+    listSessions(): Promise<SolanaSessionKeyInfo[]>;
+    prepareApproval(id: string, rpc: SolanaPaymentRpc): Promise<{
+        transaction: Uint8Array;
+        recentBlockhash: string;
+    }>;
+    prepareRevocation(id: string, rpc: SolanaPaymentRpc): Promise<{
+        transaction: Uint8Array;
+        recentBlockhash: string;
+    }>;
+    revoke(id: string): Promise<void>;
+    signPayment(id: string, payment: SolanaSessionPayment, rpc: SolanaPaymentRpc): Promise<string>;
+}
+
+// @public
+export interface SolanaSessionKeyScope {
+    allowedRecipients: string[];
+    budget: bigint;
+    cluster: string;
+    expiry: number;
+    // (undocumented)
+    maxPerPayment: bigint;
+    // (undocumented)
+    maxTxCount?: number;
+    // (undocumented)
+    mint: string;
+    // (undocumented)
+    period?: {
+        amount: bigint;
+        seconds: number;
+        start: number;
+    };
+}
+
+// @public (undocumented)
+export type SolanaSessionKeyStatus = "pending" | "active" | "revoked" | "expired";
+
+// @public (undocumented)
+export interface SolanaSessionPayment {
+    // (undocumented)
+    amount: bigint;
+    feePayer: string;
+    // (undocumented)
+    memo: string | null;
+    recipient: string;
+}
+
+// @public
+export function solanaTransactionId(tx: ParsedSolanaTransaction): string;
+
+// @public (undocumented)
+export interface SolanaTransferSettlementExpected {
+    // (undocumented)
+    amount: bigint | string;
+    // (undocumented)
+    cluster: string;
+    // (undocumented)
+    commitment?: "confirmed" | "finalized";
+    // (undocumented)
+    mint: string;
+    // (undocumented)
+    payer: string;
+    // (undocumented)
+    recipient: string;
+    // (undocumented)
+    signature: string;
+    // (undocumented)
+    signedMessageHash?: string;
+    signer: string;
+}
+
+// @public (undocumented)
+export type SpendRefusal = "expired" | "not-yet-valid" | "no-matching-grant" | "recipient-not-allowed" | "over-per-payment" | "over-total" | "over-count" | "period-limit-exceeded" | "rail-not-allowed" | "invalid-authorization";
+
+// @public (undocumented)
+export interface SpendRequest {
+    // (undocumented)
+    amount: bigint;
+    // (undocumented)
+    asset: string;
+    // (undocumented)
+    at: number;
+    // (undocumented)
+    countSoFar: number;
+    // (undocumented)
+    periodSpentSoFar?: bigint;
+    // (undocumented)
+    rail: Rail;
+    // (undocumented)
+    recipient: string;
+    // (undocumented)
+    spentSoFar: bigint;
+}
+
+// @public (undocumented)
+export type SpendVerdict = {
+    allow: true;
+    grant: number;
+} | {
+    allow: false;
+    reason: SpendRefusal;
+};
+
+// @public
+export const SPL_PAYMENT_COMPUTE_UNIT_LIMIT = 40000;
+
+// @public
+export const SPL_PAYMENT_COMPUTE_UNIT_PRICE = 1n;
+
+// @public
+export interface SplDelegateApproval {
+    amount: bigint;
+    // (undocumented)
+    decimals: number;
+    delegate: string;
+    // (undocumented)
+    mint: string;
+    // (undocumented)
+    owner: string;
+    // (undocumented)
+    recentBlockhash: string;
+    // (undocumented)
+    tokenProgram: string;
+}
+
+// @public
+export interface SplTokenAccount {
+    // (undocumented)
+    amount: bigint;
+    // (undocumented)
+    mint: string;
+    owner: string;
+    state: number;
+}
+
+// @public (undocumented)
+export interface SplTransferPayment {
+    amount: bigint;
+    authority: string;
+    // (undocumented)
+    computeUnitLimit?: number;
+    computeUnitPrice?: bigint;
+    // (undocumented)
+    decimals: number;
+    feePayer: string;
+    memo: string | null;
+    // (undocumented)
+    mint: string;
+    // (undocumented)
+    recentBlockhash: string;
+    recipient: string;
+    sourceOwner?: string;
+    tokenProgram: string;
+}
+
+// @public (undocumented)
+export interface StageRecord {
+    at: number;
+    evidence: string;
+}
+
+// @public
+export function stalledFor(timeline: PaymentTimeline, now: number): Duration;
+
+// @public (undocumented)
+export function startTimeline(): PaymentTimeline;
 
 // @public
 export const STORAGE_KEYS: {
@@ -2106,12 +3416,15 @@ export class StorageError extends Error {
 // @public
 export interface StoredSessionKey {
     accumulatedGas?: bigint;
+    accumulatedTokenSpends?: Record<`0x${string}`, bigint>;
     accumulatedValue?: bigint;
     authorization: SignedAuthorization;
     createdAt: number;
     id: string;
     keyPair: EncryptedKeyPair;
     lastUsedAt: number;
+    // Warning: (ae-forgotten-export) The symbol "SessionKeyPeriodUsage" needs to be exported by the entry point index.d.ts
+    periodUsage?: Record<string, SessionKeyPeriodUsage>;
     scope: SessionKeyScope;
     status: SessionKeyStatus;
     useCount: number;
@@ -2140,6 +3453,23 @@ export class TelegramChannel implements NotificationChannel {
     // (undocumented)
     send(payload: NotificationPayload): Promise<void>;
 }
+
+// @public
+export interface TimelineLeg {
+    // (undocumented)
+    duration: Duration;
+    // (undocumented)
+    from: PaymentStage;
+    skipped: PaymentStage[];
+    // (undocumented)
+    to: PaymentStage;
+}
+
+// @public
+export function timelineLegs(timeline: PaymentTimeline): TimelineLeg[];
+
+// @public
+export function toChecksumAddress(address: string): `0x${string}`;
 
 // @public
 export function toDecString(value: bigint): string;
@@ -2307,12 +3637,73 @@ export interface TokenSearchResult {
 }
 
 // @public (undocumented)
+export interface TopUpChannelTransaction {
+    // (undocumented)
+    amount: bigint;
+    // (undocumented)
+    channelId: string;
+    // (undocumented)
+    feePayer: string;
+    // (undocumented)
+    mintAccount: ChannelMintAccount;
+    // (undocumented)
+    payer: string;
+    // (undocumented)
+    programAddress?: string;
+    // (undocumented)
+    recentBlockhash: string;
+}
+
+// @public (undocumented)
 export interface TransactionDescriptor {
     data: `0x${string}`;
     from?: `0x${string}`;
     gas?: string;
     to: `0x${string}`;
     value: string;
+}
+
+// @public
+export interface TransactionRequest {
+    // Warning: (ae-forgotten-export) The symbol "SignedEip7702Authorization" needs to be exported by the entry point index.d.ts
+    authorizationList?: SignedEip7702Authorization[];
+    // (undocumented)
+    chainId?: number;
+    // (undocumented)
+    data?: string;
+    // (undocumented)
+    from?: string;
+    // (undocumented)
+    gas?: string;
+    // (undocumented)
+    gasPrice?: string;
+    // (undocumented)
+    maxFeePerGas?: string;
+    // (undocumented)
+    maxPriorityFeePerGas?: string;
+    // (undocumented)
+    nonce?: string;
+    // (undocumented)
+    to: string;
+    // (undocumented)
+    type?: "legacy" | "eip1559" | "eip7702";
+    // (undocumented)
+    value?: string;
+}
+
+// @public
+export const TRUSTED_CHANNEL_PROGRAMS: Readonly<Record<string, TrustedChannelProgram>>;
+
+// @public (undocumented)
+export interface TrustedChannelProgram {
+    // (undocumented)
+    address: string;
+    // (undocumented)
+    lastDeployedSlot: bigint;
+    // (undocumented)
+    programData: string;
+    // (undocumented)
+    upgradeAuthority: string;
 }
 
 // @public (undocumented)
@@ -2327,10 +3718,13 @@ export interface TxMetadata {
 }
 
 // @public
-export type TxStatus = "pending" | "confirmed" | "failed" | "reorg" | "speedup" | "cancel";
+export type TxStatus = "pending" | "confirming" | "confirmed" | "failed" | "reorg" | "speedup" | "cancel";
 
 // @public (undocumented)
 export type TxStatusCallback = (status: TxStatus, payload?: Partial<NotificationPayload>) => void;
+
+// @public
+export function typedDataDigest(req: SessionKeyTypedDataRequest): `0x${string}`;
 
 // @public (undocumented)
 export interface UniversalConnector {
@@ -2358,6 +3752,7 @@ export interface UniversalConnector {
     namespaces: string[];
     onAccountsChanged?(session: UniversalWalletSession, handler: (accounts: string[]) => void): () => void;
     onChainChanged?(session: UniversalWalletSession, handler: (chainId: string) => void): () => void;
+    onSessionChanged?(session: UniversalWalletSession, handler: (change: SessionChange) => void): () => void;
     // (undocumented)
     reconnect?(session: UniversalWalletSession): Promise<UniversalWalletSession>;
     // (undocumented)
@@ -2367,9 +3762,11 @@ export interface UniversalConnector {
     }): Promise<unknown>;
     // (undocumented)
     sendCalls?(session: UniversalWalletSession, calls: BatchCall[], chainId?: string, options?: SendCallsOptions): Promise<string>;
+    sendDelegation?(session: UniversalWalletSession, request: SelfDelegationRequest): Promise<SentDelegation>;
     // (undocumented)
     sendTransaction?(session: UniversalWalletSession, input: unknown): Promise<unknown>;
     showCallsStatus?(session: UniversalWalletSession, bundleHash: string): Promise<void>;
+    signAuthorization?(session: UniversalWalletSession, request: DelegationAuthorizationRequest): Promise<SignedDelegationAuthorization>;
     // (undocumented)
     signMessage?(session: UniversalWalletSession, input: unknown): Promise<unknown>;
     // (undocumented)
@@ -2397,7 +3794,7 @@ export interface UniversalWalletSession {
     // (undocumented)
     namespaces: Record<Namespace, SessionNamespace>;
     // (undocumented)
-    platform: "desktop-web" | "mobile-web" | "in-app-browser";
+    platform: Platform;
     // (undocumented)
     topic?: string;
     // (undocumented)
@@ -2407,6 +3804,9 @@ export interface UniversalWalletSession {
     // (undocumented)
     walletType: "walletconnect" | "eip6963" | "xrpl" | string;
 }
+
+// @public (undocumented)
+export const UNKNOWN_DELEGATION: DelegationStatus;
 
 // @public
 export function unregisterChainFeeEstimator(chainId: string): void;
@@ -2465,6 +3865,7 @@ export interface UserOperationGasEstimate {
     accountGasLimits?: Hex;
     // (undocumented)
     callGasLimit: bigint;
+    paymasterVerificationGasLimit?: bigint;
     // (undocumented)
     preVerificationGas: bigint;
     // (undocumented)
@@ -2504,8 +3905,46 @@ export interface UserOperationResponse {
 // @public (undocumented)
 export type UserOperationVersion = "0.6" | "0.7";
 
+// @public (undocumented)
+export function validateAuthorization(value: unknown): AuthorizationValidation;
+
 // @public
 export function validateChainId(chainId: string): void;
+
+// @public
+export function validateTypedDataRequest(req: SessionKeyTypedDataRequest): string | null;
+
+// @public
+export function verifyChannelSettlement(rpc: SettlementRpc, expected: ChannelSettlementExpected): Promise<SettlementVerification>;
+
+// @public
+export function verifyEip3009Settlement(rpc: SettlementRpc, expected: Eip3009SettlementExpected): Promise<SettlementVerification>;
+
+// @public
+export function verifySignedChannelOpen(signed: Uint8Array, expected: OpenChannelTransaction): string;
+
+// @public
+export function verifySignedOwnerTransaction(wire: Uint8Array, expected: {
+    kind: "approve";
+    approval: SplDelegateApproval;
+} | {
+    kind: "revoke";
+    revocation: Omit<SplDelegateApproval, "delegate" | "amount" | "decimals">;
+}): string;
+
+// @public
+export function verifySignedSplTransfer(wire: Uint8Array, p: SplTransferPayment, options?: {
+    allowLighthouse?: boolean;
+}): string;
+
+// @public
+export function verifySolanaSignature(tx: ParsedSolanaTransaction, address: string): boolean;
+
+// @public
+export function verifySolanaTransferSettlement(rpc: SettlementRpc, expected: SolanaTransferSettlementExpected): Promise<SettlementVerification>;
+
+// @public
+export function verifyVoucher(signature: Uint8Array, authorizedSigner: string, voucher: ChannelVoucher): boolean;
 
 // @public (undocumented)
 export interface WalletCapabilities {
@@ -2561,6 +4000,22 @@ export const WC_DISCONNECT_TIMEOUT = 6001;
 export const WC_DISCONNECT_USER = 6000;
 
 // @public (undocumented)
+export interface WithdrawPayerChannelTransaction {
+    // (undocumented)
+    channelId: string;
+    // (undocumented)
+    feePayer: string;
+    // (undocumented)
+    mintAccount: ChannelMintAccount;
+    // (undocumented)
+    payer: string;
+    // (undocumented)
+    programAddress?: string;
+    // (undocumented)
+    recentBlockhash: string;
+}
+
+// @public (undocumented)
 export const XRPL_DEVNET = "xrpl:2";
 
 // @public
@@ -2571,7 +4026,7 @@ export const XRPL_TESTNET = "xrpl:1";
 
 // Warnings were encountered during analysis:
 //
-// packages/core/dist/index.d.ts:1349:5 - (ae-forgotten-export) The symbol "createNamespace" needs to be exported by the entry point index.d.ts
+// packages/core/dist/index.d.ts:3110:5 - (ae-forgotten-export) The symbol "createNamespace" needs to be exported by the entry point index.d.ts
 
 // (No @packageDocumentation comment for this package)
 
