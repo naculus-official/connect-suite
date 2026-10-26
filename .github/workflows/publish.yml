@@ -8,6 +8,9 @@ name: Publish
 # only after lib succeeds, in this one run, because appkit depends on the lib
 # version it is released with.
 #
+# Publishing uses npm trusted publishing (OIDC): no NPM_TOKEN secret. Each package
+# must trust this workflow and the npm-publish environment on npmjs.com.
+#
 # A dry run checks configuration only. It does not prove the release is safe:
 # the registry and tag checks run only on a real publish.
 on:
@@ -50,7 +53,6 @@ jobs:
         with:
           node-version: 22
           cache: pnpm
-          registry-url: 'https://registry.npmjs.org'
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
       - name: Build lib
@@ -86,8 +88,6 @@ jobs:
           else
             pnpm -r --filter "./packages/lib/packages/*" publish --access public --no-git-checks --provenance
           fi
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
       - name: Tag and release lib
         if: ${{ inputs.dry_run == 'false' }}
         working-directory: packages/lib
@@ -124,7 +124,6 @@ jobs:
         with:
           node-version: 22
           cache: pnpm
-          registry-url: 'https://registry.npmjs.org'
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
       # appkit typechecks against the lib build output (its workspace deps), so
@@ -162,8 +161,6 @@ jobs:
           else
             pnpm -r --filter "./packages/appkit/packages/*" publish --access public --no-git-checks --provenance
           fi
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
       - name: Tag and release appkit
         if: ${{ inputs.dry_run == 'false' }}
         working-directory: packages/appkit
