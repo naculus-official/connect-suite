@@ -1,0 +1,73 @@
+:host {
+  display: inline-flex;
+}
+
+.badge {
+  display: inline-flex;
+  height: 1.25rem;
+  width: fit-content;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  gap: 0.25rem;
+  overflow: hidden;
+  border-radius: 9999px;
+  border: 1px solid transparent;
+  padding: 0 0.5rem;
+  padding-top: 0.125rem;
+  padding-bottom: 0.125rem;
+  font-size: 0.75rem;
+  font-weight: 500;
+  white-space: nowrap;
+  transition: all 150ms;
+  font-family: inherit;
+}
+
+.badge:focus-visible {
+  border-color: hsl(var(--ring));
+  box-shadow: 0 0 0 3px hsl(var(--ring) / 0.5);
+}
+
+::slotted(svg) {
+  width: 0.75rem;
+  height: 0.75rem;
+  pointer-events: none;
+}
+
+/* ── Variants ───────────────────────────────────────────────── */
+
+.badge.variant-default {
+  background-color: hsl(var(--primary));
+  color: hsl(var(--primary-foreground));
+}
+
+.badge.variant-secondary {
+  background-color: hsl(var(--secondary));
+  color: hsl(var(--secondary-foreground));
+}
+
+.badge.variant-destructive {
+  background-color: color-mix(in srgb, hsl(var(--destructive)) 85%, black);
+  color: hsl(var(--destructive-foreground));
+}
+
+.badge.variant-outline {
+  border-color: hsl(var(--border));
+  color: hsl(var(--foreground));
+}
+
+.badge.variant-ghost {
+  color: hsl(var(--foreground));
+}
+.badge.variant-ghost:hover {
+  background-color: hsl(var(--muted));
+}
+
+.badge.variant-link {
+  color: hsl(var(--primary));
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+.badge.variant-link:hover {
+  text-decoration: none;
+}

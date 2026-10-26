@@ -1,0 +1,79 @@
+/**
+ * Session Keys / Ephemeral Keys Module
+ *
+ * Short-lived, scoped cryptographic keys that enable automated
+ * transaction signing without repeated wallet popups.
+ *
+ * @see docs/features/session-keys.md
+ */
+
+export type { SessionKeyErrorCode } from "./errors";
+export { createSessionKeyError, SESSION_KEY_ERROR_MESSAGES } from "./errors";
+export { SessionKeyManager } from "./SessionKeyManager";
+export {
+  type BoundChannel,
+  type ChannelVoucherKeyConfig,
+  type ChannelVoucherKeyInfo,
+  ChannelVoucherKeyManager,
+  type ChannelVoucherKeyStatus,
+  type ChannelVoucherPolicy,
+  type SignedChannelVoucher,
+} from "./channel-voucher-keys";
+export {
+  type SolanaSessionKeyConfig,
+  type SolanaSessionKeyInfo,
+  SolanaSessionKeyManager,
+  type SolanaSessionKeyScope,
+  type SolanaSessionKeyStatus,
+  type SolanaSessionPayment,
+} from "./solana-session-keys";
+export {
+  decryptPrivateKey,
+  encryptPrivateKey,
+  SessionKeyStorage,
+} from "./storage";
+
+export type {
+  EncryptedKeyPair,
+  ScopeCheckResult,
+  SessionKeyBundle,
+  SessionKeyInfo,
+  SessionKeyManagerConfig,
+  SessionKeyPair,
+  SessionKeyRail,
+  SessionKeyScope,
+  SessionKeyTransaction,
+  SessionKeyStatus,
+  SignedAuthorization,
+  StoredSessionKey,
+} from "./types";
+
+export { DEFAULT_SESSION_KEY_CONFIG } from "./types";
+export {
+  recoverTypedDataSigner,
+  sessionKeyAddress,
+  typedDataDigest,
+  validateTypedDataRequest,
+} from "./typed-data";
+export type { SessionKeyTypedDataRequest } from "./typed-data";
+export {
+  ANY_DELEGATE,
+  type BuildDelegationInput,
+  buildDelegation,
+  type CaveatOptions,
+  caveatsFromScope,
+  DELEGATION_FRAMEWORK,
+  DELEGATION_FRAMEWORK_CHAIN_IDS,
+  delegationHash,
+  delegationSigningDigest,
+  delegationTypedData,
+  type FrameworkCaveat,
+  encodePermissionContext,
+  encodeRedeemDelegations,
+  encodeRedeemDelegationsWithContext,
+  encodeSingleExecution,
+  type FrameworkDelegation,
+  type FrameworkExecution,
+  ROOT_AUTHORITY,
+  SINGLE_DEFAULT_MODE,
+} from "./delegation-framework";

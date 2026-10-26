@@ -1,0 +1,106 @@
+import { WalletError } from "../errors";
+import type { WalletData } from "../wallet";
+import type { StorageAdapter } from "./types";
+
+const DB_NAME = "naculus_wallet";
+const STORE_NAME = "wallets";
+// Version 2 repairs databases that were previously opened by a read-only
+// probe (or another client) at v1 before the wallet store existed. Upgrading
+// preserves any valid v1 wallet records and creates only the missing store.
+const DB_VERSION = 2;
+
+function openDB(): Promise<IDBDatabase> {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(DB_NAME, DB_VERSION);
+    req.onupgradeneeded = () => {
+      const db = req.result;
+      if (!db.objectStoreNames.contains(STORE_NAME)) {
+        db.createObjectStore(STORE_NAME, { keyPath: "id" });
+      }
+    };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () =>
+      reject(new WalletError("storage_unavailable", "IndexedDB open failed"));
+  });
+}
+
+export class IndexedDbStorageAdapter implements StorageAdapter {
+  readonly type = "indexedDb" as const;
+  private readonly key: string;
+
+  constructor(key: string = "naculus_pocket") {
+    this.key = key;
+  }
+
+  isAvailable(): boolean {
+    return typeof indexedDB !== "undefined";
+  }
+
+  /**
+   * Reads, writes and deletes must not degrade silently: a null read looks like
+   * an empty wallet, and a dropped write or delete leaves the caller wrong
+   * without any signal.
+   */
+  private assertAvailable(): void {
+    if (!this.isAvailable()) {
+      throw new WalletError(
+        "storage_unavailable",
+        "IndexedDB is unavailable; the wallet was not read, written or cleared.",
+      );
+    }
+  }
+
+  async load(): Promise<WalletData | null> {
+    this.assertAvailable();
+    const db = await openDB();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE_NAME, "readonly");
+      const store = tx.objectStore(STORE_NAME);
+      const req = store.get(this.key);
+      req.onsuccess = () => resolve(req.result?.data ?? null);
+      req.onerror = () =>
+        reject(
+          new WalletError(
+            "storage_read_failed",
+            "Failed to read from IndexedDB",
+          ),
+        );
+    });
+  }
+
+  async save(data: WalletData): Promise<void> {
+    this.assertAvailable();
+    const db = await openDB();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE_NAME, "readwrite");
+      const store = tx.objectStore(STORE_NAME);
+      const req = store.put({ id: this.key, data });
+      req.onsuccess = () => resolve();
+      req.onerror = () =>
+        reject(
+          new WalletError(
+            "storage_write_failed",
+            "Failed to write to IndexedDB",
+          ),
+        );
+    });
+  }
+
+  async clear(): Promise<void> {
+    this.assertAvailable();
+    const db = await openDB();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE_NAME, "readwrite");
+      const store = tx.objectStore(STORE_NAME);
+      const req = store.delete(this.key);
+      req.onsuccess = () => resolve();
+      req.onerror = () =>
+        reject(
+          new WalletError(
+            "storage_clear_failed",
+            "Failed to clear from IndexedDB",
+          ),
+        );
+    });
+  }
+}

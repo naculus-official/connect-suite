@@ -1,0 +1,197 @@
+/**
+ * Amount formatting utilities for ERC-20 tokens.
+ *
+ * Provides parseUnits (human-readable → raw bigint) and
+ * formatUnits (raw bigint → human-readable string).
+ *
+ * Handles any decimal count (0–255 as per ERC-20 spec).
+ */
+
+import { ERC20TokenError } from "./errors";
+
+/**
+ * Convert a human-readable amount (string, number, or bigint) to the smallest unit.
+ *
+ * @example
+ * parseUnits("1.5", 6)   → 1500000n    (USDC: 1.5 → 1,500,000)
+ * parseUnits("0.01", 18) → 10000000000000000n
+ * parseUnits("100", 0)   → 100n
+ *
+ * @throws {ERC20TokenError} on invalid input
+ */
+export function parseUnits(
+  amount: string | number | bigint,
+  decimals: number,
+): bigint {
+  if (
+    typeof decimals !== "number" ||
+    !Number.isInteger(decimals) ||
+    decimals < 0 ||
+    decimals > 255
+  ) {
+    throw new ERC20TokenError(
+      "invalid_amount",
+      `Invalid decimals value: ${decimals}. Must be an integer from 0 to 255.`,
+    );
+  }
+
+  // Handle bigint directly (already in raw units)
+  if (typeof amount === "bigint") {
+    if (amount < 0n) {
+      throw new ERC20TokenError(
+        "invalid_amount",
+        `Amount must be non-negative, got: ${amount}`,
+      );
+    }
+    return amount;
+  }
+
+  let str: string;
+  if (typeof amount === "number") {
+    if (!Number.isFinite(amount)) {
+      throw new ERC20TokenError(
+        "invalid_amount",
+        `Amount is not a finite number: ${amount}`,
+      );
+    }
+    // JavaScript numbers above MAX_SAFE_INTEGER cannot represent wei/token
+    // units exactly. Require callers to pass a decimal string or bigint for
+    // large financial amounts rather than silently introducing rounding.
+    if (Math.abs(amount) > Number.MAX_SAFE_INTEGER) {
+      throw new ERC20TokenError(
+        "invalid_amount",
+        "Number amount exceeds MAX_SAFE_INTEGER; use a decimal string or bigint.",
+      );
+    }
+    if (amount < 0) {
+      throw new ERC20TokenError(
+        "invalid_amount",
+        `Amount must be non-negative, got: ${amount}`,
+      );
+    }
+    str = amount.toString();
+  } else {
+    // string
+    str = amount.trim();
+  }
+
+  if (str === "" || str === ".") {
+    throw new ERC20TokenError(
+      "invalid_amount",
+      `Amount string is empty or invalid: "${amount}"`,
+    );
+  }
+
+  // Validate characters — character loop avoids ReDoS from ambiguous regex quantifiers
+  let hasDot = false;
+  for (let i = 0; i < str.length; i++) {
+    const ch = str[i];
+    if (ch === ".") {
+      if (hasDot)
+        throw new ERC20TokenError(
+          "invalid_amount",
+          `Multiple decimal points in amount: "${amount}"`,
+        );
+      hasDot = true;
+    } else if (ch < "0" || ch > "9") {
+      throw new ERC20TokenError(
+        "invalid_amount",
+        `Amount contains invalid character '${ch}': "${amount}"`,
+      );
+    }
+  }
+
+  // Handle negative (should not happen after trimming, but just in case)
+  if (str.startsWith("-")) {
+    throw new ERC20TokenError(
+      "invalid_amount",
+      `Amount must be non-negative, got: "${amount}"`,
+    );
+  }
+
+  // Split into integer and fractional parts
+  const dotIndex = str.indexOf(".");
+  let integerPart: string;
+  let fractionalPart: string;
+
+  if (dotIndex === -1) {
+    integerPart = str;
+    fractionalPart = "";
+  } else {
+    integerPart = str.slice(0, dotIndex);
+    fractionalPart = str.slice(dotIndex + 1);
+  }
+
+  // Check fractional length
+  if (fractionalPart.length > decimals) {
+    throw new ERC20TokenError(
+      "invalid_amount",
+      `Amount "${amount}" has ${fractionalPart.length} decimal places, but max is ${decimals}.`,
+    );
+  }
+
+  // Pad fractional part to required decimals
+  fractionalPart = fractionalPart.padEnd(decimals, "0");
+
+  // Remove leading zeros from integer part (but keep at least "0")
+  integerPart = integerPart.replace(/^0+/, "") || "0";
+
+  const combined = integerPart + fractionalPart;
+
+  try {
+    return BigInt(combined);
+  } catch {
+    throw new ERC20TokenError(
+      "invalid_amount",
+      `Failed to parse amount as bigint: "${amount}"`,
+    );
+  }
+}
+
+/**
+ * Convert a raw bigint amount to a human-readable decimal string.
+ *
+ * @example
+ * formatUnits(1500000n, 6)       → "1.5"
+ * formatUnits(10000000000000000n, 18) → "0.01"
+ * formatUnits(0n, 18)            → "0"
+ */
+export function formatUnits(amount: bigint, decimals: number): string {
+  if (
+    typeof decimals !== "number" ||
+    !Number.isInteger(decimals) ||
+    decimals < 0 ||
+    decimals > 255
+  ) {
+    throw new ERC20TokenError(
+      "invalid_amount",
+      `Invalid decimals value: ${decimals}. Must be an integer from 0 to 255.`,
+    );
+  }
+
+  const negative = amount < 0n;
+  const absAmount = negative ? -amount : amount;
+
+  const str = absAmount.toString();
+  const padded = str.padStart(decimals + 1, "0");
+
+  const dotPos = padded.length - decimals;
+  let integerPart = padded.slice(0, dotPos);
+  let fractionalPart = padded.slice(dotPos);
+
+  // Remove trailing zeros from fractional part
+  while (fractionalPart.endsWith("0")) {
+    fractionalPart = fractionalPart.slice(0, -1);
+  }
+
+  // Remove leading zeros (but keep at least "0")
+  integerPart = integerPart.replace(/^0+/, "") || "0";
+
+  if (fractionalPart.length === 0) {
+    return negative ? `-${integerPart}` : integerPart;
+  }
+
+  return negative
+    ? `-${integerPart}.${fractionalPart}`
+    : `${integerPart}.${fractionalPart}`;
+}

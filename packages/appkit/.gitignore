@@ -1,0 +1,52 @@
+node_modules
+dist
+.pnpm-store
+*.log
+.DS_Store
+.env
+.env.local
+coverage
+.vscode
+.idea
+*.opencode-panes.sh
+.codegraph/
+
+# Playwright
+playwright-report/
+test-results/
+
+# Standalone repos (cloned separately)
+connector-solana/
+connector-xrpl/
+connect-app/
+
+# Python linter cache
+.ruff_cache/
+
+# Scratch / temp
+test-opencode.md
+react-gaps.md
+CI_INTEGRATION.md
+DESIGN.md
+docs/openclaw/
+tmp/
+temp/
+debug-storybook*.log
+*.header
+storybook-static/
+# Test error output
+test_err*
+# Nested lockfiles in workspace sub-packages
+packages/*/pnpm-lock.yaml
+
+# TypeScript incremental build cache
+*.tsbuildinfo
+
+# Turborepo cache
+.turbo/
+
+# Agent workspace — never a git object (lives in the container dir, ignored defensively)
+.ai/
+AGENTS.md
+CLAUDE.md
+.claude/

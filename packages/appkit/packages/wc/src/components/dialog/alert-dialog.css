@@ -1,0 +1,47 @@
+:host {
+  display: none;
+}
+
+:host([open]) {
+  display: block;
+}
+
+dialog {
+  border: none;
+  border-radius: calc(var(--radius, 0.5rem) - 2px);
+  background-color: hsl(var(--card));
+  color: hsl(var(--card-foreground));
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+  padding: 1.5rem;
+  max-width: 28rem;
+  width: calc(100vw - 2rem);
+  max-height: 85vh;
+  overflow-y: auto;
+  margin: auto;
+  font-family: var(--font-sans, inherit);
+}
+
+dialog::backdrop {
+  background-color: rgba(0, 0, 0, 0.8);
+  backdrop-filter: blur(2px);
+}
+
+.title {
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: hsl(var(--foreground));
+  margin: 0 0 0.5rem;
+}
+
+.description {
+  font-size: 0.875rem;
+  color: hsl(var(--muted-foreground));
+  margin: 0 0 1rem;
+}
+
+.footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  margin-top: 1rem;
+}

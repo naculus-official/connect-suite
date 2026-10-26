@@ -1,0 +1,56 @@
+{
+  "name": "@naculus/connect-core",
+  "version": "0.14.2",
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    },
+    "./cctp": {
+      "types": "./dist/cctp.d.ts",
+      "import": "./dist/cctp.js",
+      "require": "./dist/cctp.cjs"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@noble/ciphers": "^2.4.0",
+    "@noble/curves": "^2.4.0",
+    "@noble/hashes": "^2.4.0",
+    "@scure/base": "^2.4.0"
+  },
+  "devDependencies": {
+    "tsup": "^8.5.1",
+    "typescript": "^5.9.3"
+  },
+  "sideEffects": false,
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/naculus-official/connect-suite.git",
+    "directory": "packages/lib/packages/core"
+  },
+  "license": "MIT",
+  "keywords": [
+    "web3",
+    "blockchain",
+    "ethereum",
+    "wallet",
+    "connect"
+  ],
+  "description": "Core interfaces and connector manager for Naculus Connect",
+  "homepage": "https://github.com/naculus-official/connect-suite/tree/dev/packages/lib/packages/core#readme",
+  "bugs": {
+    "url": "https://github.com/naculus-official/connect-suite/issues"
+  }
+}

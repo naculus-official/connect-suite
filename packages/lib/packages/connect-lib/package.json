@@ -1,0 +1,54 @@
+{
+  "name": "@naculus/connect",
+  "version": "0.14.2",
+  "description": "Convenience umbrella — core exports and connector namespaces from one package",
+  "type": "module",
+  "main": "./index.js",
+  "types": "./index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./index.d.ts",
+      "default": "./index.js"
+    }
+  },
+  "files": [
+    "index.js",
+    "index.d.ts",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "echo 'Umbrella package — nothing to build'"
+  },
+  "dependencies": {
+    "@naculus/connect-core": "workspace:*",
+    "@naculus/connector-walletconnect": "workspace:*",
+    "@naculus/connector-evm-injected": "workspace:*",
+    "@naculus/connector-embedded": "workspace:*",
+    "@naculus/connector-passkeys": "workspace:*",
+    "@naculus/connector-solana": "workspace:*",
+    "@naculus/connector-xrpl": "workspace:*",
+    "@naculus/connector-safe": "workspace:*",
+    "@naculus/connector-coinbase": "workspace:*",
+    "@naculus/siwx": "workspace:*",
+    "@naculus/wallet-engine": "workspace:*"
+  },
+  "sideEffects": false,
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/naculus-official/connect-suite.git",
+    "directory": "packages/lib/packages/connect-lib"
+  },
+  "license": "MIT",
+  "keywords": [
+    "web3",
+    "blockchain",
+    "ethereum",
+    "wallet",
+    "connect",
+    "sdk"
+  ],
+  "homepage": "https://github.com/naculus-official/connect-suite/tree/dev/packages/lib/packages/connect-lib#readme",
+  "bugs": {
+    "url": "https://github.com/naculus-official/connect-suite/issues"
+  }
+}

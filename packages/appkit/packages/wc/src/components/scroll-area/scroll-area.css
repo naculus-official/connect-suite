@@ -1,0 +1,61 @@
+:host {
+  display: block;
+  position: relative;
+  overflow: hidden;
+}
+
+.viewport {
+  width: 100%;
+  height: 100%;
+  overflow: auto;
+  border-radius: inherit;
+  outline: none;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.viewport::-webkit-scrollbar {
+  display: none;
+}
+
+.viewport:focus-visible {
+  box-shadow: 0 0 0 3px hsl(var(--ring) / 0.5);
+  outline: 1px solid transparent;
+}
+
+.scrollbar {
+  display: flex;
+  touch-action: none;
+  padding: 1px;
+  transition: background-color 150ms;
+  user-select: none;
+}
+
+.scrollbar.vertical {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 0.625rem;
+  border-left: 1px solid transparent;
+}
+
+.scrollbar.horizontal {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 0.625rem;
+  border-top: 1px solid transparent;
+}
+
+.thumb {
+  position: relative;
+  flex: 1;
+  border-radius: 9999px;
+  background-color: hsl(var(--border));
+}
+
+.thumb:hover {
+  background-color: hsl(var(--muted-foreground) / 0.3);
+}

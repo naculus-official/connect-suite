@@ -1,0 +1,21 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/api-extractor/v7/api-extractor.schema.json",
+  "mainEntryPointFilePath": "<projectFolder>/packages/react/dist/index.d.ts",
+  "bundledPackages": [],
+  "compiler": {
+    "overrideTsconfig": {
+      "skipLibCheck": true
+    }
+  },
+  "dtsRollup": {
+    "enabled": true,
+    "untrimmedFilePath": "<projectFolder>/packages/react/dist/connect-react.d.ts"
+  },
+  "apiReport": {
+    "enabled": true,
+    "reportFileName": "connect-react.api.md",
+    "reportFolder": "<projectFolder>/packages/react/etc/"
+  },
+  "docModel": { "enabled": false },
+  "tsdocMetadata": { "enabled": false }
+}

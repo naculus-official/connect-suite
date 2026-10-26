@@ -1,0 +1,78 @@
+{
+  "name": "@naculus/connect-appkit-wc",
+  "version": "0.14.2",
+  "type": "module",
+  "main": "./dist/index.cjs.js",
+  "module": "./dist/index.js",
+  "collection": "dist/collection/collection-manifest.json",
+  "types": "./dist/types/components.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/types/components.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs.js"
+    },
+    "./components/*": {
+      "types": "./dist/types/components/*.d.ts",
+      "import": "./dist/components/*.js"
+    },
+    "./dist/components/*": {
+      "types": "./dist/types/components/*.d.ts",
+      "import": "./dist/components/*"
+    },
+    "./dist/*": {
+      "types": "./dist/types/*",
+      "import": "./dist/*"
+    },
+    "./loader": {
+      "types": "./loader/index.d.ts",
+      "import": "./loader/index.js",
+      "require": "./loader/index.cjs.js"
+    }
+  },
+  "files": [
+    "dist/",
+    "loader/",
+    "hydrate/"
+  ],
+  "scripts": {
+    "build": "stencil build --docs",
+    "dev": "stencil build --dev --watch --serve",
+    "start": "stencil build --dev --watch --serve",
+    "generate": "stencil generate"
+  },
+  "dependencies": {
+    "@floating-ui/dom": "^1.8.0",
+    "qrcode": "^1.5.4"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "devDependencies": {
+    "@stencil/core": "^4.45.1",
+    "@stencil/react-output-target": "^1.6.2",
+    "@stencil/vue-output-target": "^0.14.6",
+    "typescript": "^6.0.3"
+  },
+  "sideEffects": false,
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/naculus-official/connect-suite.git",
+    "directory": "packages/appkit/packages/wc"
+  },
+  "license": "MIT",
+  "description": "Stencil Web Components for Naculus Connect — framework-agnostic UI kit with 28 components",
+  "homepage": "https://github.com/naculus-official/connect-suite/tree/dev/packages/appkit/packages/wc#readme",
+  "bugs": {
+    "url": "https://github.com/naculus-official/connect-suite/issues"
+  },
+  "keywords": [
+    "web3",
+    "wallet",
+    "connect",
+    "ui",
+    "components",
+    "stencil",
+    "web-components"
+  ]
+}

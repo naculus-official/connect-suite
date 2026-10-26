@@ -1,0 +1,94 @@
+{
+  "name": "@naculus/connect-native",
+  "version": "0.14.2",
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    },
+    "./ui": {
+      "types": "./dist/ui/index.d.ts",
+      "import": "./dist/ui/index.js",
+      "require": "./dist/ui/index.cjs"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "clean": "rm -rf dist",
+    "test:run": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "peerDependencies": {
+    "@naculus/connect-appkit-core": "^0.14.2",
+    "@naculus/connect-core": "^0.14.2",
+    "@naculus/connect-appkit-react": "^0.14.2",
+    "@naculus/wallet-engine": "^0.14.2",
+    "react-native": "*",
+    "@react-native-async-storage/async-storage": "*",
+    "@walletconnect/react-native-compat": "*",
+    "@solana-mobile/mobile-wallet-adapter-protocol-kit": "*",
+    "@mobile-wallet-protocol/client": "*",
+    "expo-secure-store": "*"
+  },
+  "devDependencies": {
+    "@naculus/connect-core": "workspace:^",
+    "@naculus/wallet-engine": "workspace:^",
+    "tsup": "^9.0.0",
+    "typescript": "^6.0.3",
+    "@naculus/connect-appkit-react": "workspace:*",
+    "@naculus/connect-appkit-core": "workspace:*"
+  },
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org"
+  },
+  "sideEffects": false,
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/naculus-official/connect-suite.git",
+    "directory": "packages/appkit/packages/native"
+  },
+  "license": "MIT",
+  "description": "Naculus Connect for React Native — AsyncStorage sessions, WalletConnect deep links, Solana Mobile Wallet Adapter, Coinbase Mobile Wallet Protocol and a Keystore-sealed embedded wallet, wired into the React hooks",
+  "homepage": "https://github.com/naculus-official/connect-suite/tree/dev/packages/appkit/packages/native#readme",
+  "bugs": {
+    "url": "https://github.com/naculus-official/connect-suite/issues"
+  },
+  "keywords": [
+    "web3",
+    "wallet",
+    "react-native",
+    "expo",
+    "walletconnect",
+    "solana-mobile",
+    "mobile-wallet-adapter"
+  ],
+  "peerDependenciesMeta": {
+    "react-native": {
+      "optional": true
+    },
+    "@react-native-async-storage/async-storage": {
+      "optional": true
+    },
+    "@walletconnect/react-native-compat": {
+      "optional": true
+    },
+    "@solana-mobile/mobile-wallet-adapter-protocol-kit": {
+      "optional": true
+    },
+    "@mobile-wallet-protocol/client": {
+      "optional": true
+    },
+    "expo-secure-store": {
+      "optional": true
+    }
+  }
+}

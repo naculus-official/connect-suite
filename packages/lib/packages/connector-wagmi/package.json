@@ -1,0 +1,55 @@
+{
+  "name": "@naculus/connector-wagmi",
+  "version": "0.14.2",
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@naculus/connect-core": "workspace:*",
+    "@naculus/connector-walletconnect": "workspace:*"
+  },
+  "peerDependencies": {
+    "viem": "^2.0.0",
+    "wagmi": "^3.7.3"
+  },
+  "devDependencies": {
+    "@wagmi/core": "^3.6.5",
+    "tsup": "^8.5.1",
+    "typescript": "^5.9.3",
+    "viem": "^2.57.7",
+    "wagmi": "^3.7.7"
+  },
+  "sideEffects": false,
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/naculus-official/connect-suite.git",
+    "directory": "packages/lib/packages/connector-wagmi"
+  },
+  "license": "MIT",
+  "keywords": [
+    "web3",
+    "wagmi",
+    "react-hooks",
+    "adapter"
+  ],
+  "description": "Wagmi connector adapter",
+  "homepage": "https://github.com/naculus-official/connect-suite/tree/dev/packages/lib/packages/connector-wagmi#readme",
+  "bugs": {
+    "url": "https://github.com/naculus-official/connect-suite/issues"
+  }
+}

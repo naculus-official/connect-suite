@@ -1,0 +1,178 @@
+/// <reference types="vitest" />
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { createPasskeysConnector } from "./index";
+
+// ── localStorage polyfill for Node 26 ────────────────────────────
+
+if (typeof globalThis.localStorage === "undefined") {
+  const store: Record<string, string> = {};
+  const lsMock = {
+    getItem: (key: string) => store[key] ?? null,
+    setItem: (key: string, value: string) => {
+      store[key] = value;
+    },
+    removeItem: (key: string) => {
+      delete store[key];
+    },
+    clear: () => {
+      Object.keys(store).forEach((k) => delete store[k]);
+    },
+    get length() {
+      return Object.keys(store).length;
+    },
+    key: (index: number) => Object.keys(store)[index] ?? null,
+  };
+  Object.defineProperty(globalThis, "localStorage", {
+    value: new Proxy(lsMock, {
+      ownKeys: () => Object.keys(store),
+      getOwnPropertyDescriptor: () => ({
+        configurable: true,
+        enumerable: true,
+      }),
+    }),
+    writable: true,
+    configurable: true,
+  });
+}
+
+// WebAuthn mock
+const mockCredentialId = "test-credential-id-12345";
+
+function createMockPublicKeyCredential(
+  overrides: Record<string, unknown> = {},
+) {
+  return {
+    id: mockCredentialId,
+    rawId: new Uint8Array([1, 2, 3, 4, 5]),
+    type: "public-key",
+    response: {
+      getPublicKey: () => new Uint8Array(32).fill(0x42).buffer,
+      publicKey: new Uint8Array(32).fill(0x42).buffer,
+      clientDataJSON: new Uint8Array(0),
+      attestationObject: new Uint8Array(0),
+      signature: new Uint8Array(64).fill(0x41),
+      authenticatorData: new Uint8Array(0),
+      userHandle: null,
+    },
+    ...overrides,
+  } as unknown as PublicKeyCredential;
+}
+
+function _createMockAssertion(overrides: Record<string, unknown> = {}) {
+  return {
+    id: mockCredentialId,
+    rawId: new Uint8Array([1, 2, 3, 4, 5]),
+    type: "public-key",
+    response: {
+      authenticatorData: new Uint8Array(0),
+      clientDataJSON: new Uint8Array(0),
+      signature: new Uint8Array(64).fill(0x41),
+      userHandle: null,
+      ...overrides,
+    },
+  } as unknown as PublicKeyCredential;
+}
+
+describe("PasskeysConnector", () => {
+  beforeEach(() => {
+    localStorage.clear();
+  });
+
+  it("has correct identity", () => {
+    const connector = createPasskeysConnector();
+    expect(connector.id).toBe("passkeys");
+    expect(connector.name).toBe("Passkeys");
+    expect(connector.kind).toBe("passkeys");
+    expect(connector.namespaces).toEqual(["eip155"]);
+  });
+
+  it("returns no credential initially", () => {
+    const connector = createPasskeysConnector();
+    expect(connector.hasCredential()).toBe(false);
+    expect(connector.getAddress()).toBeNull();
+  });
+
+  it("does not connect before a smart-account implementation exists", async () => {
+    const connector = createPasskeysConnector();
+    await expect(connector.connect()).rejects.toThrow("ERC-4337");
+  });
+
+  it("creates a passkey without deriving an EVM address", async () => {
+    (navigator as any).credentials = {
+      create: vi.fn().mockResolvedValue(createMockPublicKeyCredential()),
+      get: vi.fn(),
+    };
+
+    const connector = createPasskeysConnector();
+    const credential = await connector.createPasskey();
+
+    expect(credential.publicKey).toBeTruthy();
+    expect("address" in credential).toBe(false);
+    expect(connector.hasCredential()).toBe(true);
+    expect(connector.getAddress()).toBeNull();
+  });
+
+  it("reuses existing passkey credential on reconnect", async () => {
+    (navigator as any).credentials = {
+      create: vi.fn().mockResolvedValue(createMockPublicKeyCredential()),
+      get: vi.fn(),
+    };
+
+    const connector = createPasskeysConnector();
+    await connector.createPasskey();
+    const address1 = connector.getAddress();
+
+    // Simulate a new connector instance with same storage
+    const connector2 = createPasskeysConnector();
+    const address2 = connector2.getAddress();
+
+    // Should reload from localStorage
+    expect(address2).toBe(address1);
+    expect(address2).toBeNull();
+  });
+
+  it("disconnects clears saved credential", async () => {
+    (navigator as any).credentials = {
+      create: vi.fn().mockResolvedValue(createMockPublicKeyCredential()),
+      get: vi.fn(),
+    };
+
+    const connector = createPasskeysConnector();
+    await connector.createPasskey();
+    expect(connector.hasCredential()).toBe(true);
+
+    await connector.disconnect({} as any);
+    expect(connector.hasCredential()).toBe(false);
+    expect(connector.getAddress()).toBeNull();
+  });
+
+  it("does not advertise or fake EIP-191 message signing", async () => {
+    const connector = createPasskeysConnector();
+
+    await expect(
+      connector.signMessage({} as any, { message: "Hello Passkeys!" }),
+    ).rejects.toThrow("not EIP-191");
+  });
+
+  it("signMessage throws when no message provided", async () => {
+    const connector = createPasskeysConnector();
+
+    await expect(connector.signMessage({} as any, {})).rejects.toThrow(
+      "not EIP-191",
+    );
+  });
+
+  it("throws for unsupported methods", async () => {
+    const connector = createPasskeysConnector();
+
+    await expect(connector.signTransaction({} as any, {})).rejects.toThrow(
+      "not supported",
+    );
+    await expect(connector.sendTransaction({} as any, {})).rejects.toThrow(
+      "not supported",
+    );
+    await expect(connector.sendCalls({} as any, [])).rejects.toThrow(
+      "not supported",
+    );
+  });
+});

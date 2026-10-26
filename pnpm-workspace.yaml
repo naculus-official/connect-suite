@@ -1,0 +1,33 @@
+packages:
+  - "packages/lib/packages/*"
+  - "packages/appkit/packages/*"
+link-workspace-packages: true
+prefer-workspace-packages: true
+shamefullyHoist: true
+minimumReleaseAge: 0
+allowBuilds:
+  '@parcel/watcher': false
+  '@reown/appkit': true
+  '@swc/core': true
+  bufferutil: true
+  esbuild: true
+  keccak: true
+  msw: true
+  puppeteer: true
+  sharp: true
+  unrs-resolver: true
+  utf-8-validate: true
+  workerd: true
+overrides:
+  axios: ^1.18.1
+  esbuild: '>=0.28.1'
+  fast-uri: '^3.1.9'
+  source-map-js: ^1.2.2
+  vite: '^7.3.7'
+  undici: '^8.12.2'
+  launch-editor: '^2.14.2'
+  follow-redirects: '^1.16.1'
+  zod: ^4.6.6
+auditConfig:
+  ignoreGhsas:
+    - GHSA-86w9-cpqp-85rv

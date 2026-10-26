@@ -1,0 +1,15 @@
+{
+  "$comment": "gzip bytes per built file; reset with node scripts/size-budget.mjs --update and give the reason in the commit.",
+  "extra": [],
+  "budgets": {
+    "packages/core/dist/index.js": 18432,
+    "packages/native/dist/index.js": 4096,
+    "packages/native/dist/ui/index.js": 10240,
+    "packages/react/dist/client.js": 2048,
+    "packages/react/dist/index.js": 33792,
+    "packages/ui/dist/index.js": 37376,
+    "packages/vue/dist/index.js": 19456,
+    "packages/wc/dist/index.js": 1024,
+    "packages/wc/loader/index.js": 1024
+  }
+}

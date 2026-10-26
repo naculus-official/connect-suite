@@ -1,0 +1,309 @@
+import {
+  hashSolanaTransactionMessage,
+  type SettlementRpc,
+  type SettlementVerification,
+  verifyEip3009Settlement,
+  verifySolanaTransferSettlement,
+} from "@naculus/connect-core";
+import {
+  createPaymentPayload,
+  type SelectOptions,
+  selectRequirement,
+  type X402TypedDataSigner,
+} from "./evm-exact";
+import {
+  createSvmPaymentPayload,
+  sessionKeyMismatch,
+  type X402SolanaOptions,
+  type X402SolanaSessionKey,
+} from "./svm-exact";
+import {
+  encodeHeader,
+  PAYMENT_REQUIRED_HEADER,
+  PAYMENT_RESPONSE_HEADER,
+  PAYMENT_SIGNATURE_HEADER,
+  parsePaymentRequired,
+  parseSettlementResponse,
+  X402Error,
+  type X402PaymentRequired,
+  type X402PaymentRequirements,
+  type X402SettlementResponse,
+} from "./wire";
+
+export type X402SettlementBinding =
+  | {
+      rail: "eip3009";
+      chainId: string;
+      token: string;
+      from: string;
+      to: string;
+      amount: string;
+      nonce: string;
+    }
+  | {
+      rail: "solana";
+      cluster: string;
+      mint: string;
+      payer: string;
+      signer: string;
+      recipient: string;
+      amount: string;
+      signedMessageHash: string;
+    };
+
+export interface X402FetchOptions
+  extends Omit<SelectOptions, "evm" | "solana"> {
+  /**
+   * Pays EVM EIP-3009 requirements with either a policy-bound session key or
+   * an external-wallet signer created by `walletX402Signer`.
+   */
+  signer?: X402TypedDataSigner;
+  /** Pays Solana requirements: the connected wallet signs each one. */
+  solana?: X402SolanaOptions;
+  /** Defaults to the global fetch. */
+  fetch?: typeof fetch;
+  /**
+   * Last word before signing. Return false to decline this payment; the
+   * session key's policy still applies when this returns true.
+   */
+  approve?: (
+    requirement: X402PaymentRequirements,
+    required: X402PaymentRequired,
+  ) => boolean | Promise<boolean>;
+}
+
+export interface X402FetchResult {
+  response: Response;
+  /** The requirement that was paid, or null when no payment was asked for. */
+  paid: X402PaymentRequirements | null;
+  settlement: X402SettlementResponse | null;
+  /** Client-signed facts required to verify `settlement` on chain. */
+  settlementBinding: X402SettlementBinding | null;
+}
+
+/**
+ * fetch that pays an x402 challenge once with a session key.
+ *
+ * A 402 with a `PAYMENT-REQUIRED` header is answered by signing an EIP-3009
+ * authorization for the first requirement this client can pay, and the
+ * request is retried exactly once with `PAYMENT-SIGNATURE`. A second 402 is
+ * an error, not another payment. The challenge must come from the requested
+ * origin without a redirect and describe a resource there, and the paid
+ * retry never follows a redirect. A paid response whose `PAYMENT-RESPONSE`
+ * is malformed is returned with `settlement: null`.
+ */
+export function createX402Fetch(options: X402FetchOptions) {
+  const send = options.fetch ?? globalThis.fetch.bind(globalThis);
+  const { signer, solana } = options;
+  if (!signer && !solana) {
+    throw new X402Error(
+      "invalid_input",
+      "createX402Fetch needs a signer, a solana signer, or both.",
+    );
+  }
+
+  return async function x402Fetch(
+    input: RequestInfo | URL,
+    init?: RequestInit,
+  ): Promise<X402FetchResult> {
+    // Keep an unread copy: the retry must carry the same body.
+    const request = new Request(input, init);
+    const first = await send(request.clone());
+    if (first.status !== 402) {
+      return {
+        response: first,
+        paid: null,
+        settlement: null,
+        settlementBinding: null,
+      };
+    }
+
+    // The challenge body is not part of the protocol; release the connection.
+    void first.body?.cancel().catch(() => {});
+    const requested = new URL(request.url);
+    // A 402 reached through a redirect came from wherever the redirect led,
+    // and the paid retry would follow it there too: fetch strips only
+    // Authorization and cookies across origins, not PAYMENT-SIGNATURE. So a
+    // redirected challenge is refused, whatever resource.url it names
+    // (independent review, 2026-09-24).
+    if (
+      first.redirected ||
+      (first.url && new URL(first.url).origin !== requested.origin)
+    ) {
+      throw new X402Error(
+        "invalid_challenge",
+        "Payment challenge arrived through a redirect; refusing to pay.",
+      );
+    }
+    const required = parsePaymentRequired(
+      first.headers.get(PAYMENT_REQUIRED_HEADER),
+    );
+    let resource: URL;
+    try {
+      resource = new URL(required.resource.url, requested);
+    } catch {
+      throw new X402Error(
+        "invalid_challenge",
+        "Challenge resource.url is not a URL.",
+      );
+    }
+    if (resource.origin !== requested.origin) {
+      throw new X402Error(
+        "invalid_challenge",
+        `Challenge is for ${resource.origin}, but the request went to ${requested.origin}.`,
+      );
+    }
+
+    // A session key can pay only its own cluster and mint.
+    const accepts = solana?.sessionKey
+      ? await filterAsync(required.accepts, async (r) =>
+          r.network.startsWith("solana:")
+            ? (await sessionKeyMismatch(
+                r,
+                solana.sessionKey as X402SolanaSessionKey,
+              )) === null
+            : true,
+        )
+      : required.accepts;
+    const requirement = selectRequirement(
+      { ...required, accepts },
+      {
+        ...(options.networks ? { networks: options.networks } : {}),
+        evm: Boolean(signer),
+        solana: Boolean(solana),
+      },
+    );
+    if (options.approve && !(await options.approve(requirement, required))) {
+      throw new X402Error("payment_rejected", "Payment declined by approve().");
+    }
+    const payload = requirement.network.startsWith("solana:")
+      ? await createSvmPaymentPayload(
+          required,
+          requirement,
+          solana as X402SolanaOptions,
+        )
+      : await createPaymentPayload(
+          required,
+          requirement,
+          signer as X402TypedDataSigner,
+        );
+    const settlementBinding = bindingFor(
+      requirement,
+      payload,
+      requirement.network.startsWith("solana:")
+        ? await solanaBindingParties(solana as X402SolanaOptions)
+        : undefined,
+    );
+
+    const headers = new Headers(request.headers);
+    headers.set(PAYMENT_SIGNATURE_HEADER, encodeHeader(payload));
+    // The signed payload must not follow a redirect anywhere.
+    const second = await send(
+      new Request(request, { headers, redirect: "error" }),
+    );
+    let settlement: X402SettlementResponse | null = null;
+    try {
+      settlement = parseSettlementResponse(
+        second.headers.get(PAYMENT_RESPONSE_HEADER),
+      );
+    } catch (cause) {
+      // Payment may already have settled; a malformed receipt must not cost
+      // the caller the response it paid for.
+      if (second.status === 402) throw cause;
+    }
+    if (second.status === 402) {
+      throw new X402Error(
+        "payment_rejected",
+        `Server refused the payment${settlement?.errorReason ? `: ${settlement.errorReason}` : "."}`,
+      );
+    }
+    return {
+      response: second,
+      paid: requirement,
+      settlement,
+      settlementBinding,
+    };
+  };
+}
+
+function bindingFor(
+  requirement: X402PaymentRequirements,
+  payload: { payload: Record<string, unknown> },
+  solanaParties?: { payer: string; signer: string },
+): X402SettlementBinding {
+  if (requirement.network.startsWith("solana:")) {
+    const transaction = payload.payload.transaction;
+    if (typeof transaction !== "string")
+      throw new X402Error(
+        "invalid_input",
+        "Signed Solana transaction is missing.",
+      );
+    return {
+      rail: "solana",
+      cluster: requirement.network,
+      mint: requirement.asset,
+      payer: solanaParties?.payer as string,
+      signer: solanaParties?.signer as string,
+      recipient: requirement.payTo,
+      amount: requirement.amount,
+      signedMessageHash: hashSolanaTransactionMessage(transaction),
+    };
+  }
+  const authorization = payload.payload.authorization as Record<
+    string,
+    unknown
+  >;
+  return {
+    rail: "eip3009",
+    chainId: requirement.network,
+    token: requirement.asset,
+    from: String(authorization.from),
+    to: String(authorization.to),
+    amount: String(authorization.value),
+    nonce: String(authorization.nonce),
+  };
+}
+
+async function solanaBindingParties(
+  options: X402SolanaOptions,
+): Promise<{ payer: string; signer: string }> {
+  if (!options.sessionKey)
+    return { payer: options.signer.address, signer: options.signer.address };
+  const info = (await options.sessionKey.manager.listSessions()).find(
+    ({ id }) => id === options.sessionKey?.id,
+  );
+  if (!info)
+    throw new X402Error(
+      "invalid_input",
+      "Solana session key disappeared after signing.",
+    );
+  return { payer: info.owner, signer: info.address };
+}
+
+/** Verify an x402 result without changing fetch or settlement timing. */
+export function verifyX402Settlement(
+  result: X402FetchResult,
+  rpc: SettlementRpc,
+): Promise<SettlementVerification> {
+  const binding = result.settlementBinding;
+  const transaction = result.settlement?.transaction;
+  if (!binding || !transaction)
+    return Promise.resolve({
+      status: "mismatch",
+      reason: "Result has no settlement binding or transaction.",
+    });
+  return binding.rail === "eip3009"
+    ? verifyEip3009Settlement(rpc, { ...binding, txHash: transaction })
+    : verifySolanaTransferSettlement(rpc, {
+        ...binding,
+        signature: transaction,
+      });
+}
+
+async function filterAsync<T>(
+  items: readonly T[],
+  keep: (item: T) => Promise<boolean>,
+): Promise<T[]> {
+  const kept = await Promise.all(items.map(keep));
+  return items.filter((_, i) => kept[i]);
+}

@@ -1,0 +1,61 @@
+{
+  "name": "@naculus/connect-appkit-vue",
+  "version": "0.14.2",
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    }
+  },
+  "files": [
+    "dist/",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@naculus/connect-appkit-wc": "workspace:*",
+    "@naculus/payments-x402": "workspace:^",
+    "@stencil/vue-output-target": "^0.14.6"
+  },
+  "peerDependencies": {
+    "@naculus/connect-appkit-core": "^0.14.2",
+    "@naculus/connect-core": "^0.14.2",
+    "vue": "^3.5.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "devDependencies": {
+    "@naculus/connect-appkit-core": "workspace:*",
+    "@naculus/connect-core": "workspace:^",
+    "vitest": "^5.0.0",
+    "vue": "^3.5.43"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/naculus-official/connect-suite.git",
+    "directory": "packages/appkit/packages/vue"
+  },
+  "license": "MIT",
+  "description": "Vue component wrappers for Naculus Connect Web Components — auto-generated proxies",
+  "homepage": "https://github.com/naculus-official/connect-suite/tree/dev/packages/appkit/packages/vue#readme",
+  "bugs": {
+    "url": "https://github.com/naculus-official/connect-suite/issues"
+  },
+  "keywords": [
+    "web3",
+    "wallet",
+    "connect",
+    "ui",
+    "components",
+    "vue"
+  ]
+}

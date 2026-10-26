@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head><title>connect-appkit Verify</title>
+<style>body{font-family:system-ui;max-width:500px;margin:2rem auto;padding:0 1rem}
+a{display:block;padding:1rem;margin:.5rem 0;background:#f5f5f5;border-radius:8px;text-decoration:none;color:inherit}
+a:hover{background:#e5e5e5}
+code{background:#eee;padding:2px 6px;border-radius:4px}</style>
+</head>
+<body>
+<h1>connect-appkit</h1>
+<p>Choose a framework to verify:</p>
+
+<a href="http://localhost:61000">
+  <strong>React</strong><br>
+  <small>Storybook — Button, ConnectButton, AccountButton, AlertDialog</small>
+</a>
+
+<a href="temp/test-vanilla.html" target="_blank">
+  <strong>Vanilla Web Component</strong><br>
+  <small>&lt;appkit-button&gt; in plain HTML</small>
+</a>
+
+<a href="temp/test-vue.html" target="_blank">
+  <strong>Vue</strong><br>
+  <small>Vue wrapper + raw WC side-by-side</small>
+</a>
+
+<hr>
+<p><code>pnpm storybook</code> 要先跑起來，WC/Vue 頁面直接開瀏覽器就能看。</p>
+</body>
+</html>

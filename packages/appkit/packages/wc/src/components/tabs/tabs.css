@@ -1,0 +1,60 @@
+:host {
+  display: block;
+  max-width: 100%;
+  min-width: 0;
+}
+
+/* On narrow screens the tabs scroll sideways instead of widening the page. */
+.tablist {
+  display: flex;
+  border-bottom: 1px solid hsl(var(--border));
+  gap: 0;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scrollbar-width: thin;
+}
+
+.tab {
+  flex-shrink: 0;
+}
+
+.tab {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.5rem 1rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: hsl(var(--muted-foreground));
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 150ms;
+  font-family: inherit;
+}
+
+.tab:hover {
+  color: hsl(var(--foreground));
+}
+
+.tab.selected {
+  color: hsl(var(--foreground));
+  border-bottom-color: hsl(var(--primary));
+}
+
+.tab:focus-visible {
+  outline: 2px solid hsl(var(--ring));
+  outline-offset: -2px;
+  border-radius: 2px 2px 0 0;
+}
+
+.tab:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.panel {
+  padding-top: 1rem;
+}

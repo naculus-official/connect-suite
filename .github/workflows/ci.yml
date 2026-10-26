@@ -1,0 +1,135 @@
+name: CI
+
+on:
+  push:
+    branches: [dev]
+  pull_request:
+    branches: [dev]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  audit:
+    name: Audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 11.1.2
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Audit dependencies
+        run: pnpm audit --audit-level=critical
+
+  lib:
+    name: Lib
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: packages/lib
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 11.1.2
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      - name: Install dependencies
+        working-directory: .
+        run: pnpm install --frozen-lockfile
+      - name: Build packages
+        run: pnpm -r build
+      - name: TypeScript check
+        run: npx tsc --noEmit
+      - name: Run tests
+        run: pnpm test:run
+      # After the build: these read the built packages.
+      - name: Public API surface unchanged
+        run: pnpm api:check
+      - name: Critical helpers have one owner
+        run: pnpm helpers:check
+      - name: Bundle size budget
+        run: pnpm size:check
+      - name: Lint
+        run: pnpm lint
+      - name: Spell check
+        run: pnpm spell-check
+      - name: Duplication threshold
+        run: pnpm dup:check
+
+  appkit:
+    name: Appkit
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: packages/appkit
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 11.1.2
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      - name: Install dependencies
+        working-directory: .
+        run: pnpm install --frozen-lockfile
+      - name: Build packages
+        run: pnpm -r build
+      - name: TypeScript check
+        run: npx tsc --noEmit
+      - name: Run tests
+        run: pnpm test:run
+      # After the build: these read the built packages.
+      - name: Public API surface unchanged
+        run: pnpm api:check
+      - name: Critical helpers have one owner
+        run: pnpm helpers:check
+      - name: Bundle size budget
+        run: pnpm size:check
+      - name: Lint
+        run: pnpm lint
+      - name: Spell check
+        run: pnpm spell-check
+      - name: Duplication threshold
+        run: pnpm dup:check
+
+  matrix:
+    name: Dependency matrix
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 11.1.2
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Build packages
+        run: pnpm run build
+      # Packs every publishable package and installs each one alone into a
+      # clean consumer, so cross-package ranges are checked as shipped.
+      - name: Cross-package dependency matrix
+        run: pnpm run test:matrix
+
+  docs:
+    name: Public docs
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      # Relative links must resolve, and internal terms must stay out of docs.
+      - name: Docs guard
+        run: node scripts/docs-check.mjs

@@ -1,0 +1,58 @@
+{
+  "name": "@naculus/wallet-engine",
+  "version": "0.14.2",
+  "type": "module",
+  "description": "Embedded wallet engine (BIP39, HD keys, signing)",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsup && tsup --config tsup.worker.config.ts",
+    "clean": "rm -rf dist",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@naculus/connect-core": "workspace:*",
+    "@noble/curves": "^2.4.0",
+    "@noble/hashes": "^2.4.0",
+    "@scure/base": "^2.4.0",
+    "@scure/bip32": "^2.4.0",
+    "@scure/bip39": "^2.4.0"
+  },
+  "devDependencies": {
+    "@naculus/connect-core": "workspace:*",
+    "fake-indexeddb": "^6.2.6",
+    "tsup": "^8.5.1",
+    "typescript": "^5.9.3",
+    "vitest": "^5.0.5"
+  },
+  "sideEffects": false,
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/naculus-official/connect-suite.git",
+    "directory": "packages/lib/packages/wallet-engine"
+  },
+  "license": "MIT",
+  "keywords": [
+    "web3",
+    "wallet",
+    "hd-wallet",
+    "bip39",
+    "bip32",
+    "embedded"
+  ],
+  "homepage": "https://github.com/naculus-official/connect-suite/tree/dev/packages/lib/packages/wallet-engine#readme",
+  "bugs": {
+    "url": "https://github.com/naculus-official/connect-suite/issues"
+  }
+}

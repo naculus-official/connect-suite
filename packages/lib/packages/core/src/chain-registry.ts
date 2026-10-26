@@ -1,0 +1,216 @@
+/**
+ * Chain Registry
+ *
+ * Single source of truth for chain names, token addresses, and provider IDs.
+ * Do NOT create new mapping tables elsewhere — use `CHAINS` and `getChainInfo()`.
+ */
+
+import { EIP155_PUBLIC_RPC_URLS } from "./constants";
+
+// ─── ChainInfo Interface ───────────────────────────────────────────────
+
+export interface ChainInfo {
+  name: string;
+  caip2Id: string; // e.g. "eip155:1"
+  nativeCurrency: { symbol: string; decimals: number };
+  /** Full currency name required by EIP-3085 when adding a chain to a wallet. */
+  nativeCurrencyName?: string;
+  /** Public RPC endpoints used by EIP-3085 wallet_addEthereumChain. */
+  rpcUrls?: readonly string[];
+  axelarName?: string; // Axelar GMP name (undefined = not supported by Axelar)
+  usdcAddress?: string; // ERC-20 USDC address (undefined = no USDC on this chain)
+  /** Whether usdcAddress is Circle-issued native USDC or a bridged representation. */
+  usdcVariant?: "native" | "bridged";
+  usdcDecimals?: number; // USDC decimals (defaults to 6)
+  usdtAddress?: string; // ERC-20 USDT address (undefined = no USDT on this chain)
+  usdtDecimals?: number; // USDT decimals (defaults to 6)
+  entryPoint?: string; // ERC-4337 EntryPoint address (undefined = AA not supported)
+  factoryAddress?: string; // Account factory address
+  explorerUrl?: string; // Block explorer base URL (undefined = use default)
+  chainlinkEthUsdFeed?: string; // Chainlink ETH/USD price feed oracle address
+}
+
+// ─── CHAINS Registry ───────────────────────────────────────────────────
+
+export const CHAINS: Record<number, ChainInfo> = {
+  1: {
+    name: "Ethereum",
+    caip2Id: "eip155:1",
+    nativeCurrency: { symbol: "ETH", decimals: 18 },
+    nativeCurrencyName: "Ether",
+    rpcUrls: EIP155_PUBLIC_RPC_URLS["eip155:1"],
+    axelarName: "ethereum",
+    usdcAddress: "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+    usdcVariant: "native",
+    usdtAddress: "0xdAC17F958D2ee523a2206206994597C13D831ec7",
+    entryPoint: "0x0000000071727De22E5E9d8BAf0edAc6f37da032",
+    factoryAddress: "0x91E60e0613810449d098b0b5Ec8b51A0FE8c8985",
+    explorerUrl: "https://etherscan.io",
+    chainlinkEthUsdFeed: "0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419",
+  },
+  10: {
+    name: "Optimism",
+    caip2Id: "eip155:10",
+    nativeCurrency: { symbol: "ETH", decimals: 18 },
+    nativeCurrencyName: "Ether",
+    rpcUrls: EIP155_PUBLIC_RPC_URLS["eip155:10"],
+    usdcAddress: "0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85",
+    usdcVariant: "native",
+    usdtAddress: "0x94b008aA00579c1307B0EF2c499aD98a8ce58e58",
+    entryPoint: "0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789",
+    factoryAddress: "0x9406Cc6185a346906296840746125a0E44976454",
+    explorerUrl: "https://optimistic.etherscan.io",
+    chainlinkEthUsdFeed: "0x13e3Ee699D1909E989722E753853AE30b17e08c5",
+  },
+  56: {
+    name: "BNB Chain",
+    caip2Id: "eip155:56",
+    nativeCurrency: { symbol: "BNB", decimals: 18 },
+    axelarName: "binance",
+    usdcAddress: "0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d",
+    usdcVariant: "bridged",
+    usdtAddress: "0x55d398326f99059fF775485246999027B3197955",
+    usdcDecimals: 18,
+    usdtDecimals: 18,
+    explorerUrl: "https://bscscan.com",
+  },
+  100: {
+    name: "Gnosis",
+    caip2Id: "eip155:100",
+    nativeCurrency: { symbol: "xDAI", decimals: 18 },
+    axelarName: "gnosis",
+    usdcAddress: "0xDDAfbb505ad214D7b80b1f830fcCc89B60fb7A83",
+    usdcVariant: "bridged",
+    usdtAddress: "0x4ECaBa5870353805a9F068101A40E0f32ed605C6",
+    explorerUrl: "https://gnosisscan.io",
+  },
+  137: {
+    name: "Polygon",
+    caip2Id: "eip155:137",
+    nativeCurrency: { symbol: "POL", decimals: 18 },
+    nativeCurrencyName: "POL",
+    rpcUrls: EIP155_PUBLIC_RPC_URLS["eip155:137"],
+    axelarName: "polygon",
+    usdcAddress: "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359",
+    usdcVariant: "native",
+    usdtAddress: "0xc2132D05D31c914a87C6611C10748AEb04B58e8F",
+    entryPoint: "0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789",
+    factoryAddress: "0x9406Cc6185a346906296840746125a0E44976454",
+    explorerUrl: "https://polygonscan.com",
+    chainlinkEthUsdFeed: "0xAB594600376Ec9fD91F8e885dADF0CE036862dE0",
+  },
+  250: {
+    name: "Fantom",
+    caip2Id: "eip155:250",
+    nativeCurrency: { symbol: "FTM", decimals: 18 },
+    axelarName: "fantom",
+    usdcAddress: "0x04068DA6C83AFCFA0e13ba15A6696662335D5B75",
+    usdcVariant: "bridged",
+    explorerUrl: "https://ftmscan.com",
+  },
+  324: {
+    name: "zkSync Era",
+    caip2Id: "eip155:324",
+    nativeCurrency: { symbol: "ETH", decimals: 18 },
+  },
+  1101: {
+    name: "Polygon zkEVM",
+    caip2Id: "eip155:1101",
+    nativeCurrency: { symbol: "ETH", decimals: 18 },
+    axelarName: "polygon-zkevm",
+    usdcAddress: "0xA8CE8aee21bC2A48a5EF670afCc9274C7bbbC035",
+    usdcVariant: "bridged",
+    explorerUrl: "https://zkevm.polygonscan.com",
+  },
+  8453: {
+    name: "Base",
+    caip2Id: "eip155:8453",
+    nativeCurrency: { symbol: "ETH", decimals: 18 },
+    nativeCurrencyName: "Ether",
+    rpcUrls: EIP155_PUBLIC_RPC_URLS["eip155:8453"],
+    axelarName: "base",
+    usdcAddress: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+    usdcVariant: "native",
+    entryPoint: "0x0000000071727De22E5E9d8BAf0edAc6f37da032",
+    factoryAddress: "0x91E60e0613810449d098b0b5Ec8b51A0FE8c8985",
+    explorerUrl: "https://basescan.org",
+  },
+  42161: {
+    name: "Arbitrum",
+    caip2Id: "eip155:42161",
+    nativeCurrency: { symbol: "ETH", decimals: 18 },
+    nativeCurrencyName: "Ether",
+    rpcUrls: EIP155_PUBLIC_RPC_URLS["eip155:42161"],
+    axelarName: "arbitrum",
+    usdcAddress: "0xaf88d065e77c8cC2239327C5EDb3A432268e5831",
+    usdcVariant: "native",
+    usdtAddress: "0xFd086bC7CD5C481DCC9C85ebE478A1C0b69FCbb9",
+    entryPoint: "0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789",
+    factoryAddress: "0x9406Cc6185a346906296840746125a0E44976454",
+    explorerUrl: "https://arbiscan.io",
+  },
+  43114: {
+    name: "Avalanche",
+    caip2Id: "eip155:43114",
+    nativeCurrency: { symbol: "AVAX", decimals: 18 },
+    axelarName: "avalanche",
+    usdcAddress: "0xB97EF9Ef8734C71904D8002F8b6Bc66Dd9c48a6E",
+    usdcVariant: "native",
+    explorerUrl: "https://snowtrace.io",
+  },
+  59144: {
+    name: "Linea",
+    caip2Id: "eip155:59144",
+    nativeCurrency: { symbol: "ETH", decimals: 18 },
+    usdcAddress: "0x176211869cA2b568f2A7D4EE941E073a821EE1ff",
+    usdcVariant: "native",
+    explorerUrl: "https://lineascan.build",
+  },
+  534352: {
+    name: "Scroll",
+    caip2Id: "eip155:534352",
+    nativeCurrency: { symbol: "ETH", decimals: 18 },
+    usdcAddress: "0x06eFdBFf2a14a7c8E15944D1F4A48F9F95F663A4",
+    usdcVariant: "bridged",
+    explorerUrl: "https://scrollscan.com",
+  },
+  11155111: {
+    name: "Sepolia",
+    caip2Id: "eip155:11155111",
+    // Circle testnet USDC; source: Circle docs, "USDC contract addresses".
+    usdcAddress: "0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238",
+    usdcVariant: "native",
+    nativeCurrency: { symbol: "ETH", decimals: 18 },
+    nativeCurrencyName: "Sepolia Ether",
+    rpcUrls: EIP155_PUBLIC_RPC_URLS["eip155:11155111"],
+    entryPoint: "0x0000000071727De22E5E9d8BAf0edAc6f37da032",
+    factoryAddress: "0x91E60e0613810449d098b0b5Ec8b51A0FE8c8985",
+    explorerUrl: "https://sepolia.etherscan.io",
+  },
+  84532: {
+    name: "Base Sepolia",
+    caip2Id: "eip155:84532",
+    nativeCurrency: { symbol: "ETH", decimals: 18 },
+    nativeCurrencyName: "Ether",
+    rpcUrls: EIP155_PUBLIC_RPC_URLS["eip155:84532"],
+    usdcAddress: "0x036CbD53842c5426634e7929541eC2318f3dCF7e",
+    usdcVariant: "native",
+    explorerUrl: "https://sepolia.basescan.org",
+  },
+};
+
+// ─── Helpers ───────────────────────────────────────────────────────────
+
+/**
+ * Get chain info for a given chain ID.
+ * Throws if the chain is not in the registry.
+ */
+export function getChainInfo(chainId: number): ChainInfo {
+  const info = CHAINS[chainId];
+  if (!info) {
+    throw new Error(
+      `Chain ${chainId} not found in registry. Add it to chain-registry.ts`,
+    );
+  }
+  return info;
+}

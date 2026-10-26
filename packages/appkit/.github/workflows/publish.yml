@@ -1,0 +1,157 @@
+name: Publish
+
+# Publishing is manual, on purpose — the same reasoning as connect-lib's
+# workflow. A `release: published` trigger tags first and publishes second, so
+# the tag would mean "someone clicked publish" rather than "these packages are
+# on the registry". It also arrives with no `dry_run` input, which made the
+# publish step's condition false and go straight to a real publish. And now that
+# a preflight guards this workflow that path could not succeed anyway: the
+# release has already created the tag, so `tag coherence` refuses.
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Dry run (no actual publish)'
+        required: true
+        default: 'true'
+        type: choice
+        options:
+          - 'true'
+          - 'false'
+
+jobs:
+  publish:
+    name: Publish to npm
+    runs-on: ubuntu-latest
+    permissions:
+      # write, because the tag and release step below pushes a tag. It is the
+      # narrowest thing that lets this workflow record what it published; the
+      # alternative was a tag nobody creates, which is what left `tag coherence`
+      # unable to fire in this repo at all.
+      contents: write
+      id-token: write
+    environment: npm-publish
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # The preflight's `tag coherence` check asks git whether v<version>
+          # already exists. The default shallow checkout fetches no tags, so on
+          # a runner that check would answer "free" for every version ever
+          # released — green, and meaningless. It has to see the tags to be a
+          # check at all.
+          fetch-depth: 0
+
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 11.1.2
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+          registry-url: 'https://registry.npmjs.org'
+
+      # Before install, because everything it checks is answerable from the
+      # checkout alone and one of those things is whether this workspace is
+      # wired to a sibling directory that does not exist on a runner. Left until
+      # after the build, that condition surfaces as `TS2307: Cannot find module
+      # '@naculus/connect-core'` five minutes in, which names the wrong problem.
+      - name: Release preflight (configuration)
+        run: node scripts/release-preflight.mjs --pre-bump
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build all packages
+        run: pnpm -r build
+
+      # The same gap connect-lib's publish workflow had: tests do not typecheck
+      # and tsup only compiles the src entry graph, so nothing in the release
+      # path would notice a broken type until a consumer hit it.
+      #
+      # On a runner there is no ../connect-lib, so the sibling `paths` in
+      # tsconfig.json fall through to node_modules and this checks appkit
+      # against the published @naculus/* packages — which is the thing a
+      # release needs to be true.
+      - name: TypeScript check
+        run: pnpm typecheck
+
+      - name: Run tests
+        run: pnpm test:run
+
+      # Runs on a dry run too, and before anything reaches npm: a release whose
+      # CHANGELOG has no section for this version stops here. Until 0.5.0 the
+      # release body was GitHub's generated PR list alone, which omits every
+      # change committed straight to dev (0.5.0's appkit notes were empty).
+      # The notes also go to the run summary, so a dry run shows them.
+      - name: Release notes
+        run: |
+          set -euo pipefail
+          node --test scripts/release-notes.test.mjs
+          VERSION=$(node -p "require('./packages/react/package.json').version")
+          node scripts/release-notes.mjs "$VERSION" > "$RUNNER_TEMP/release-notes.md"
+          cat "$RUNNER_TEMP/release-notes.md" >> "$GITHUB_STEP_SUMMARY"
+
+      # Deliberately not skipped on a dry run. connect-lib splits its preflight
+      # because its offline `--pre-bump` mode is cheap and its full mode is not;
+      # this one only has the full mode, and a dry run whose preflight was
+      # skipped would report green for a release the real run refuses — which is
+      # the whole failure this step exists to prevent.
+      - name: Release preflight
+        run: |
+          VERSION=$(node -p "require('./packages/react/package.json').version")
+          node scripts/release-preflight.mjs --expect "$VERSION"
+
+      # ci.yml has audited every push and PR for a while; this workflow, the one
+      # that actually ships code, had no security gate at all.
+      #
+      # No `if`: a dry run that skipped this would report green for a release the
+      # real run refuses. Deliberately not softened with continue-on-error or a
+      # trailing `|| echo` — a gate that only warns is not a gate.
+      - name: Audit production dependencies
+        run: pnpm audit --audit-level=critical
+
+      - name: Publish packages
+        run: |
+          if [ "${{ inputs.dry_run == 'true' }}" = "true" ]; then
+            echo "🧪 Dry run — would publish:"
+            pnpm -r publish --dry-run --access public --no-git-checks
+          else
+            pnpm -r publish --access public --no-git-checks --provenance
+          fi
+        env:
+          # setup-node's registry-url writes an .npmrc containing
+          # `_authToken=${NODE_AUTH_TOKEN}`, and nothing was setting it. Every
+          # run so far has logged `Failed to replace env in config:
+          # ${NODE_AUTH_TOKEN}` and no one read it, because a dry run needs no
+          # credentials — so the first real publish would have been the first
+          # time this mattered, and it would have died with ENEEDAUTH after the
+          # preflight had already passed.
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      # This repo has never tagged a release. Five versions went to npm with
+      # nothing in git marking which commit produced them, and the preflight's
+      # `tag coherence` check had no tags to find, so it could not have failed.
+      #
+      # Runs only after the publish step succeeded, so a tag means "this is on
+      # the registry" rather than "someone tried". Nothing here is allowed to
+      # fail quietly: a `|| true` would turn "the tag points somewhere else"
+      # into a green checkmark, which is the state that makes a tag worthless.
+      - name: Tag and release
+        if: ${{ inputs.dry_run == 'false' }}
+        run: |
+          set -euo pipefail
+          # Annotated tags need an identity; runners do not provide one.
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          # Same manifest the preflight read, which proved every publishable
+          # package agrees on it and that v$VERSION did not already exist.
+          VERSION=$(node -p "require('./packages/react/package.json').version")
+          git tag -a "v$VERSION" -m "Release v$VERSION"
+          git push origin "v$VERSION"
+          # CHANGELOG notes first; GitHub appends its PR list and compare link.
+          gh release create "v$VERSION" --notes-file "$RUNNER_TEMP/release-notes.md" --generate-notes --verify-tag
+        env:
+          GH_TOKEN: ${{ github.token }}

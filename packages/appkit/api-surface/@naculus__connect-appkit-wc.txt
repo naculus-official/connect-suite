@@ -1,0 +1,32 @@
+@naculus/connect-appkit-wc
+.:
+  type AppkitAccordionCustomEvent
+  type AppkitAlertDialogCustomEvent
+  type AppkitCheckboxCustomEvent
+  type AppkitCollapsibleCustomEvent
+  type AppkitConnectButtonCustomEvent
+  type AppkitDialogCustomEvent
+  type AppkitDropdownMenuCustomEvent
+  type AppkitInputCustomEvent
+  type AppkitPopoverCustomEvent
+  type AppkitSelectCustomEvent
+  type AppkitSwitchCustomEvent
+  type AppkitTabsCustomEvent
+  type AppkitToggleGroupCustomEvent
+  AvatarSize
+  BadgeVariant
+  ButtonSize
+  ButtonVariant
+  Components
+  JSX
+  Locale
+  SeparatorOrientation
+./components/*: ./dist/types/components/*.d.ts (pattern)
+./dist/components/*: ./dist/types/components/*.d.ts (pattern)
+./dist/*: ./dist/types/* (pattern)
+./loader:
+  * from ../dist/types/components
+  applyPolyfills
+  type CustomElementsDefineOptions
+  defineCustomElements
+  setNonce

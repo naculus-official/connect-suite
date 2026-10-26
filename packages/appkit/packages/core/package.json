@@ -1,0 +1,58 @@
+{
+  "name": "@naculus/connect-appkit-core",
+  "version": "0.14.2",
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "clean": "rm -rf dist",
+    "test:run": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "peerDependencies": {
+    "@naculus/connect-core": "^0.14.2"
+  },
+  "dependencies": {
+    "@naculus/payments-x402": "workspace:^"
+  },
+  "devDependencies": {
+    "@naculus/connect-core": "workspace:^",
+    "tsup": "^9.0.0",
+    "typescript": "^6.0.3"
+  },
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org"
+  },
+  "sideEffects": false,
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/naculus-official/connect-suite.git",
+    "directory": "packages/appkit/packages/core"
+  },
+  "license": "MIT",
+  "description": "Naculus Connect AppKit — framework-neutral state, chain and token logic shared by the React and Vue bindings",
+  "homepage": "https://github.com/naculus-official/connect-suite/tree/dev/packages/appkit/packages/core#readme",
+  "bugs": {
+    "url": "https://github.com/naculus-official/connect-suite/issues"
+  },
+  "keywords": [
+    "web3",
+    "wallet",
+    "connect",
+    "caip-2",
+    "framework-agnostic"
+  ]
+}

@@ -1,0 +1,300 @@
+@naculus/connect-appkit-react
+.:
+  AddressValidationLevel
+  type AddressValidationResult
+  AppkitAccordion
+  type AppkitAccordionEvents
+  AppkitAccountButton
+  type AppkitAccountButtonEvents
+  AppkitAlertDialog
+  type AppkitAlertDialogEvents
+  AppkitAvatar
+  type AppkitAvatarEvents
+  AppkitBadge
+  type AppkitBadgeEvents
+  AppkitButton
+  type AppkitButtonEvents
+  AppkitCard
+  AppkitCardContent
+  type AppkitCardContentEvents
+  AppkitCardDescription
+  type AppkitCardDescriptionEvents
+  type AppkitCardEvents
+  AppkitCardFooter
+  type AppkitCardFooterEvents
+  AppkitCardHeader
+  type AppkitCardHeaderEvents
+  AppkitCardTitle
+  type AppkitCardTitleEvents
+  AppkitCheckbox
+  type AppkitCheckboxEvents
+  AppkitCollapsible
+  type AppkitCollapsibleEvents
+  AppkitConnectButton
+  type AppkitConnectButtonEvents
+  AppkitDialog
+  type AppkitDialogEvents
+  AppkitDropdownMenu
+  type AppkitDropdownMenuEvents
+  AppkitInput
+  type AppkitInputEvents
+  AppkitPopover
+  type AppkitPopoverEvents
+  AppkitProgress
+  type AppkitProgressEvents
+  AppkitScrollArea
+  type AppkitScrollAreaEvents
+  AppkitSelect
+  type AppkitSelectEvents
+  AppkitSeparator
+  type AppkitSeparatorEvents
+  AppkitSkeleton
+  type AppkitSkeletonEvents
+  AppkitSwitch
+  type AppkitSwitchEvents
+  AppkitTabs
+  type AppkitTabsEvents
+  AppkitToggleGroup
+  type AppkitToggleGroupEvents
+  AppkitTooltip
+  type AppkitTooltipEvents
+  ApprovalChange
+  AtomicSupport
+  BalanceChange
+  buildDelegationPolicyMessage
+  ChainCapabilities
+  ChainInfo
+  clearClient
+  ClientConfig
+  ConnectionStatus
+  CostComparison
+  CostComparisonOperation
+  CostComparisonOptions
+  createClient
+  DEFAULT_EVM_CHAINS
+  DelegationPolicyPreview
+  type EmbeddedWalletAccountView
+  type EmbeddedWalletView
+  type EvmTransaction
+  type ExecuteError
+  type ExecuteOptions
+  ExecuteRouteResult
+  type ExecutionPreview
+  type ExecutionRoute
+  formatSol
+  GasInfo
+  getChainById
+  getClient
+  getDefaultChains
+  getLatestBlockhash
+  getLocale
+  getSignatureStatus
+  getSolanaBalance
+  getUserFriendlyError
+  InjectedProviderRegistration
+  isRetryableError
+  LAMPORTS_PER_SOL
+  type Locale
+  NativeWalletConnectOptions
+  parseSol
+  PassphraseCancelledError
+  PassphraseGate
+  PassphraseIntent
+  PassphraseRequest
+  PolicyExecutionAdapter
+  PolicyExecutionCheck
+  PolicyExecutionRoute
+  PolicyExecutionSubmission
+  PreparedPolicyExecution
+  type Quote
+  type QuoteOptions
+  resetSessionKeyManager
+  RiskAssessment
+  RiskLevel
+  RiskWarning
+  type SendCallsStatus
+  setLocale
+  SimulationResult
+  SimulationStatus
+  type SIWxConfig
+  SolanaBalance
+  SolanaConfirmationStatus
+  SolanaIdentity
+  SolanaPayer
+  SolanaRoles
+  SolanaRolesAbsence
+  SolanaRpcError
+  SolanaSigner
+  SolanaWalletFeatures
+  StorageSecurityFinding
+  StorageSecurityReport
+  t
+  type TokenBalanceResult
+  type TokenInfo
+  TokenSelector
+  type TokenSelectorProps
+  TxMonitorContext
+  type TxMonitorLike
+  type TxStatus
+  type TxStatusEntry
+  useAccount
+  useAuthorizations
+  type UseAuthorizationsOptions
+  type UseAuthorizationsReturn
+  useBalance
+  useCapabilities
+  type UseCapabilitiesReturn
+  useChain
+  useCompareCosts
+  type UseCompareCostsInput
+  type UseCompareCostsReturn
+  useConnect
+  useCreateSessionKey
+  type UseCreateSessionKeyReturn
+  useDelegate
+  type UseDelegateOptions
+  type UseDelegateReturn
+  useDelegation
+  useDelegationPolicy
+  type UseDelegationPolicyOptions
+  type UseDelegationPolicyReturn
+  type UseDelegationReturn
+  useDisconnect
+  useEmbeddedWallet
+  type UseEmbeddedWalletReturn
+  useERC20Allowance
+  type UseERC20AllowanceOptions
+  type UseERC20AllowanceReturn
+  useERC20Approve
+  type UseERC20ApproveOptions
+  type UseERC20ApproveReturn
+  useERC20Transfer
+  type UseERC20TransferOptions
+  type UseERC20TransferReturn
+  useERC20TransferSimulation
+  type UseERC20TransferSimulationOptions
+  type UseERC20TransferSimulationReturn
+  useExecuteCalls
+  type UseExecuteCallsOptions
+  type UseExecuteCallsReturn
+  useExecuteRoute
+  type UseExecuteRouteReturn
+  useLastTx
+  type UseLastTxResult
+  useLookupAddress
+  type UseLookupAddressOptions
+  type UseLookupAddressResult
+  useMppSession
+  type UseMppSessionReturn
+  useNotification
+  usePassphraseGate
+  type UsePassphraseGateReturn
+  usePaymentFetch
+  type UsePaymentFetchOptions
+  type UsePaymentFetchReturn
+  useResolveName
+  type UseResolveNameOptions
+  type UseResolveNameResult
+  useRevokeSession
+  type UseRevokeSessionReturn
+  type UserFriendlyError
+  type UserOpStatus
+  useRouteQuote
+  type UseRouteQuoteInput
+  type UseRouteQuoteReturn
+  useSendCalls
+  useSendTransaction
+  useSendUserOperation
+  type UseSendUserOperationOptions
+  type UseSendUserOperationReturn
+  useSendWithSession
+  type UseSendWithSessionReturn
+  useSession
+  useSessionKeys
+  type UseSessionKeysReturn
+  type UseSessionReturn
+  useSignInWithEthereum
+  type UseSignInWithEthereumOptions
+  type UseSignInWithEthereumReturn
+  useSignInWithX
+  type UseSignInWithXOptions
+  type UseSignInWithXReturn
+  useSignMessage
+  useSimulateTransfer
+  type UseSimulateTransferOptions
+  type UseSimulateTransferReturn
+  useSiwxAuthSession
+  type UseSiwxAuthSessionOptions
+  type UseSiwxAuthSessionReturn
+  useSIWxLogin
+  type UseSIWxLoginOptions
+  type UseSIWxLoginReturn
+  useSIWxSession
+  type UseSIWxSessionOptions
+  type UseSIWxSessionReturn
+  useSmartAccount
+  type UseSmartAccountOptions
+  type UseSmartAccountReturn
+  useSolanaAccount
+  type UseSolanaAccountReturn
+  useSolanaBalance
+  type UseSolanaBalanceOptions
+  type UseSolanaBalanceReturn
+  useSolanaRoles
+  type UseSolanaRolesReturn
+  useSolanaSessionKey
+  type UseSolanaSessionKeyReturn
+  useSolanaTransaction
+  type UseSolanaTransactionReturn
+  useSwitchChain
+  type UseSwitchChainReturn
+  useTokenBalance
+  type UseTokenBalanceOptions
+  useTokenList
+  type UseTokenListOptions
+  type UseTokenListReturn
+  useTokenSearch
+  type UseTokenSearchReturn
+  useTransactionSimulation
+  type UseTransactionSimulationReturn
+  useTxHistory
+  type UseTxHistoryResult
+  useTxMonitor
+  type UseTxMonitorResult
+  useUserOpStatus
+  type UseUserOpStatusOptions
+  type UseUserOpStatusReturn
+  useValidateDestination
+  type UseValidateDestinationOptions
+  type UseValidateDestinationReturn
+  useViemClient
+  useWallet
+  type UseWalletReturn
+  useWeb3
+  useWeb3ErrorHandler
+  type UseWeb3ErrorHandlerReturn
+  useX402Signer
+  type UseX402SignerReturn
+  validateDestination
+  WALLET_ERROR_DESCRIPTIONS
+  WALLET_ERROR_TITLES
+  WalletAccount
+  WalletChain
+  WalletData
+  WalletNamespace
+  type Web3Actions
+  Web3Client
+  type Web3ConnectConfig
+  Web3ConnectProvider
+  type Web3ConnectProviderProps
+  Web3Context
+  Web3State
+./client:
+  clearClient
+  type ClientConfig
+  createClient
+  getClient
+  type InjectedProviderRegistration
+  type NativeWalletConnectOptions
+  type TransactionInput
+  type Web3Client

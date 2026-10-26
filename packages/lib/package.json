@@ -1,0 +1,52 @@
+{
+  "name": "@naculus/connect-monorepo",
+  "private": true,
+  "packageManager": "pnpm@11.1.2",
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "pnpm -r dev",
+    "build": "pnpm -r build",
+    "preflight": "node scripts/release-preflight.mjs",
+    "release:prepare": "bash scripts/publish.sh",
+    "bump:patch": "bash scripts/publish.sh patch",
+    "bump:minor": "bash scripts/publish.sh minor",
+    "bump:major": "bash scripts/publish.sh major",
+    "version:show": "node -p \"require('./packages/core/package.json').version\"",
+    "clean": "pnpm -r clean",
+    "test": "vitest",
+    "test:run": "vitest run",
+    "test:core": "vitest run packages/core",
+    "test:ui": "vitest run packages/ui",
+    "test:coverage": "vitest run --coverage",
+    "docs:generate": "api-extractor run --local --config config/api-extractor.json",
+    "docs:serve": "npx serve docs",
+    "spell-check": "cspell lint \"**/*.{ts,tsx,md}\"",
+    "spell-fix": "cspell lint --fix \"**/*.{ts,tsx,md}\"",
+    "lint": "biome lint",
+    "api:check": "node scripts/api-surface.mjs --check",
+    "api:update": "node scripts/api-surface.mjs",
+    "helpers:check": "node scripts/critical-helpers.mjs",
+    "dup:check": "jscpd --config .jscpd.json packages/*/src",
+    "deps:check": "pnpm dlx knip@5.88.1 --production --include dependencies,unlisted,unresolved",
+    "size:check": "node scripts/size-budget.mjs"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.6.2",
+    "@changesets/cli": "^3.0.2",
+    "@microsoft/api-extractor": "^7.59.4",
+    "@reown/appkit": "^1.8.23",
+    "@testing-library/dom": "^10.4.2",
+    "@testing-library/react": "^16.3.3",
+    "@types/node": "^26.6.2",
+    "@vitest/coverage-v8": "^5.0.5",
+    "cspell": "^10.3.4",
+    "jscpd": "^5.4.1",
+    "jsdom": "^30.0.1",
+    "typescript": "^7.0.2",
+    "viem": "^2.57.7",
+    "vitest": "^5.0.5",
+    "wagmi": "^3.7.7"
+  }
+}

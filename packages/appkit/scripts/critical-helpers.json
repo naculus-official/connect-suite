@@ -1,0 +1,49 @@
+{
+  "$comment": "Helper name -> the only source files allowed to define it. An empty list means connect-core (or another connect-lib package) owns it: import it, never copy it. normalizeEip155ChainId moves to connect-core once the connect-lib release that exports it is the minimum supported version.",
+  "helpers": {
+    "normalizeEip155ChainId": [
+      "packages/core/src/web3-store.ts"
+    ],
+    "requireEip155ChainId": [],
+    "eip155Reference": [],
+    "parseCaip10": [],
+    "isEvmAddress": [],
+    "parseUnits": [],
+    "formatUnits": [],
+    "abiEncodeUint256": [],
+    "abiEncodeAddress": [],
+    "decodeUint256": [],
+    "getSelector": [],
+    "deriveKey": [],
+    "parseSolanaTransaction": [],
+    "verifySolanaSignature": [],
+    "verifySignedSplTransfer": [],
+    "associatedTokenAddress": [],
+    "compileV0": [],
+    "decodeBase64": [],
+    "encodeBase64": [],
+    "toEip155HexChainId": [],
+    "bytesEqual": [],
+    "deriveChannelPda": [],
+    "encodeChannelVoucher": [],
+    "signVoucher": [],
+    "verifyVoucher": [],
+    "assertTrustedChannelProgram": [],
+    "typedDataDigest": [],
+    "toChecksumAddress": [],
+    "aesGcmSeal": [],
+    "aesGcmOpen": [],
+    "toEip155Accounts": [
+      "packages/core/src/web3-store.ts"
+    ],
+    "parseUserOperationReceipt": [
+      "packages/core/src/user-op-receipt.ts"
+    ],
+    "base58Encode": [
+      "packages/native/src/codec.ts"
+    ],
+    "base64Decode": [
+      "packages/native/src/codec.ts"
+    ]
+  }
+}

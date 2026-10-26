@@ -1,0 +1,161 @@
+name: Publish
+
+# Publishing is manual, on purpose.
+#
+# This used to also run on `release: published`, which put the tag before the
+# publish: GitHub creates the tag when the release is published, so by the time
+# this workflow ran the version was already tagged whether or not anything
+# reached npm. The tag then meant "someone clicked publish", not "these packages
+# are on the registry". Ordering is now preflight -> publish -> tag -> release,
+# and the preflight requires the tag to be absent.
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Dry run (no actual publish)'
+        required: true
+        default: 'true'
+        type: choice
+        options:
+          - 'true'
+          - 'false'
+
+jobs:
+  publish:
+    name: Publish to npm
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write
+    environment: npm-publish
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # release-preflight fails if the release tag already exists. The
+          # default shallow checkout fetches no tags, which would make every
+          # version look untagged and turn that check into a no-op.
+          fetch-depth: 0
+
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 11.1.2
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build all packages
+        run: pnpm build
+
+      # ci.yml has run this on every push since long before the release work;
+      # publish.yml never had, and that is how 0.2.0 shipped from a tree whose
+      # typecheck was failing with twenty errors. Nothing else here would catch
+      # it: vitest does not typecheck, and tsup only compiles the src entry
+      # graph, so a test file can be broken for weeks without a red build.
+      #
+      # After the build, because the check resolves each package's dist/.
+      - name: TypeScript check
+        run: npx tsc --noEmit
+
+      - name: Run tests
+        run: pnpm test:run
+
+      # Runs on a dry run too, and before anything reaches npm: a release whose
+      # CHANGELOG has no section for this version stops here. Until 0.5.0 the
+      # release body was GitHub's generated PR list alone, which omits every
+      # change committed straight to dev (0.5.0's appkit notes were empty).
+      # The notes also go to the run summary, so a dry run shows them.
+      - name: Release notes
+        run: |
+          set -euo pipefail
+          node --test scripts/release-notes.test.mjs
+          VERSION=$(node -p "require('./packages/core/package.json').version")
+          node scripts/release-notes.mjs "$VERSION" > "$RUNNER_TEMP/release-notes.md"
+          cat "$RUNNER_TEMP/release-notes.md" >> "$GITHUB_STEP_SUMMARY"
+
+      # A dry run is checking that the publish command is configured correctly,
+      # not that a release is ready. --pre-bump is the only preflight that makes
+      # sense here: it is offline, so it cannot answer whether this version is
+      # already on the registry or whether the tag is free, and it does not pack,
+      # so it says nothing about the manifests that would actually be published.
+      #
+      # Deliberately NOT run on a dry run:
+      #   --expect      registry immutability, tag availability, packed pins
+      #   --pack-check  packed manifest coherence
+      #
+      # A green dry run means "the workflow would get as far as calling publish".
+      # It does not mean the release is safe.
+      - name: Release preflight (dry run — configuration only)
+        if: ${{ inputs.dry_run == 'true' }}
+        run: node scripts/release-preflight.mjs --pre-bump
+
+      # pnpm -r publish skips any package whose version is already on the
+      # registry, so a partial bump publishes nothing and still exits 0. The
+      # tag step below reads packages/core, which assumes every package agrees. Prove
+      # both, plus the packed manifests, before anything reaches npm.
+      - name: Release preflight
+        if: ${{ inputs.dry_run == 'false' }}
+        run: |
+          VERSION=$(node -p "require('./packages/core/package.json').version")
+          node scripts/release-preflight.mjs --expect "$VERSION"
+
+      # ci.yml has run this on every push and PR since before the release work
+      # started; publish.yml never has, so the one workflow that actually ships
+      # code was the only one with no security gate at all.
+      #
+      # No `if`: a dry run that skipped this would report green for a release
+      # the real run would refuse, which is the failure mode the dry-run split
+      # above exists to avoid. Deliberately not softened with continue-on-error
+      # or a trailing `|| echo` — a critical advisory should stop the release,
+      # and a gate that only warns is the thing this branch has been removing.
+      - name: Audit production dependencies
+        run: pnpm audit --audit-level=critical
+
+      - name: Publish packages
+        run: |
+          if [ "${{ inputs.dry_run == 'true' }}" = "true" ]; then
+            echo "🧪 Dry run — would publish:"
+            pnpm -r publish --dry-run --access public --no-git-checks --provenance
+          else
+            pnpm -r publish --access public --no-git-checks --provenance
+          fi
+        env:
+          # setup-node's registry-url writes an .npmrc containing
+          # `_authToken=${NODE_AUTH_TOKEN}`, and nothing was setting it. Every
+          # run so far has logged `Failed to replace env in config:
+          # ${NODE_AUTH_TOKEN}` and no one read it, because a dry run needs no
+          # credentials — so the first real publish would have been the first
+          # time this mattered, and it would have died with ENEEDAUTH after the
+          # preflight had already passed.
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      # Runs only after the publish step succeeded, so the tag marks what is on
+      # the registry rather than what someone intended to put there.
+      #
+      # Nothing here is allowed to fail quietly. These commands used to end in
+      # `|| echo "already exists"`, which turned "the tag points at a different
+      # commit" and "the release was already cut" into green checkmarks.
+      - name: Tag and release
+        if: ${{ inputs.dry_run == 'false' }}
+        run: |
+          set -euo pipefail
+          # Annotated tags need an identity; runners do not provide one.
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          VERSION=$(node -p "require('./packages/core/package.json').version")
+          # preflight already proved every package agrees on this version and
+          # that v$VERSION did not exist. If either has changed underneath us,
+          # these fail and the run goes red.
+          git tag -a "v$VERSION" -m "Release v$VERSION"
+          git push origin "v$VERSION"
+          # CHANGELOG notes first; GitHub appends its PR list and compare link.
+          gh release create "v$VERSION" --notes-file "$RUNNER_TEMP/release-notes.md" --generate-notes --verify-tag
+        env:
+          GH_TOKEN: ${{ github.token }}

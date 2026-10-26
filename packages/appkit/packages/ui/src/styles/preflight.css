@@ -1,0 +1,5 @@
+/* Opt-in page reset (Tailwind preflight). The components are written against
+   it, as shadcn components are. Import it only if the app has no reset of its
+   own; an app that already uses Tailwind gets the same rules from there. It
+   changes element defaults for the whole page, which is why it is separate. */
+@import "tailwindcss/preflight.css" layer(base);

@@ -1,0 +1,155 @@
+/**
+ * @naculus/wallet-engine — Embedded Wallet
+ *
+ * Self-custodial embedded wallet using BIP39 + HD key derivation.
+ * Default storage: encrypted IndexedDB (async and origin-scoped, but not
+ * XSS-proof), with encrypted localStorage as a fallback when IndexedDB is
+ * unavailable. `encryptionPassphrase` is mandatory in every runtime,
+ * including with a custom `StorageAdapter`; without it construction throws
+ * `WalletError('storage_unavailable', ...)`. The wallet encrypts records
+ * before any adapter receives them. `allowInsecureStorage` is deprecated
+ * and has no effect.
+ * Supports EVM signing (personal_sign, eth_sendTransaction).
+ *
+ * Design goals:
+ * - Zero dependency on @naculus/connect-core (fully independent)
+ * - Pluggable StorageAdapter for browser / Tauri / React Native, always
+ *   wrapped with wallet encryption
+ * - Low barrier for non-web3 users ("EasyCard mode")
+ * - Storage choices are explicit: built-in IndexedDB and localStorage
+ *   backends are always wrapped with AES-256-GCM.
+ */
+
+export type { DetectedKey, KeyNamespace } from "./derivation/key-formats";
+export {
+  detectPrivateKey,
+  toEvmPrivateKeyHex,
+  toSolanaKeypairJson,
+  toSolanaPrivateKeyBase58,
+} from "./derivation/key-formats";
+export type { Slip10Node } from "./derivation/slip10";
+export {
+  deriveEd25519,
+  ed25519DeriveChild,
+  ed25519MasterNode,
+  parseHardenedPath,
+} from "./derivation/slip10";
+export type { SolanaKeypair } from "./derivation/solana";
+// ── Key derivation ────────────────────────────────────────────────
+export {
+  deriveSolanaKeypair,
+  SOLANA_DERIVATION_PATH,
+  toSolanaSecretKeyBytes,
+} from "./derivation/solana";
+export { WalletError } from "./errors";
+// ── Solana transaction wire format ────────────────────────────────
+export type { ShortVec, SolanaTransactionLayout } from "./solana/transaction";
+export {
+  decodeShortVec,
+  isFullySigned,
+  parseSolanaTransaction,
+  signSolanaTransaction,
+  toBase64,
+  toWireBytes,
+} from "./solana/transaction";
+// Session Keys
+// The embedded wallet's session keys run on connect-core's SessionKeyManager
+// (import it from @naculus/connect-core); PocketWallet wires it up.
+export {
+  EMBEDDED_SESSION_KEYS_PREFIX,
+  type EmbeddedSessionKeyOptions,
+  LEGACY_SESSION_KEYS_STORAGE_KEY,
+} from "./session-keys/embedded";
+export type {
+  ScopeCheckResult,
+  SessionKeyBundle,
+  SessionKeyInfo,
+  SessionKeyPair,
+  SessionKeyScope,
+  SessionKeyStatus,
+  SignedAuthorization,
+  StoredSessionKey,
+} from "./session-keys/types";
+export { EVMSigner } from "./signers/evm";
+export type {
+  DelegationTransactionResult,
+  Eip7702AuthorizationOptions,
+  Eip7702AuthorizationRequest,
+  Signer,
+  SignedEip7702Authorization,
+  SignRequest,
+  SignResult,
+} from "./signers/types";
+export { EthCallProvider } from "./simulation/providers/eth-call";
+export type { SimulationProvider } from "./simulation/providers/types";
+// Transaction Simulation
+// Self-contained simulation module using eth_call (no external API dependency)
+export { SimulationManager } from "./simulation/SimulationManager";
+export type {
+  ApprovalChange,
+  BalanceChange,
+  GasInfo,
+  RiskAssessment,
+  RiskLevel,
+  RiskWarning,
+  RiskWarningCategory,
+  RiskWarningSeverity,
+  SimulationConfig,
+  SimulationCoverage,
+  SimulationProviderName,
+  SimulationResult,
+  SimulationStatus,
+  TransactionDescriptor,
+} from "./simulation/types";
+export type { EncryptedStorageOptions } from "./storage/encrypted";
+export { EncryptedStorageAdapter } from "./storage/encrypted";
+export type {
+  StorageFindingSeverity,
+  StorageSecurityFinding,
+  StorageSecurityInput,
+  StorageSecurityReport,
+} from "./storage/security";
+export { assessStorageSecurity } from "./storage/security";
+export { IndexedDbStorageAdapter } from "./storage/indexed-db";
+export {
+  type KeyStoreStorageOptions,
+  KeyStoreStorageAdapter,
+  type WalletBlobStore,
+  type WalletKeyStore,
+} from "./storage/key-store";
+export { LocalStorageAdapter } from "./storage/local-storage";
+export type {
+  StorageAdapter,
+  StorageSecurityLevel,
+  StorageType,
+} from "./storage/types";
+export type {
+  PrfAvailability,
+  PrfUnlockProvider,
+  UnlockMethod,
+  UnlockState,
+} from "./storage/unlock";
+export { derivePrfWrappingKey } from "./storage/unlock";
+export { TxPoller } from "./tx-monitor/poller";
+export {
+  MemoryHistoryStorage,
+  TxHistoryStore,
+} from "./tx-monitor/TxHistoryStore";
+// Transaction Monitor
+export { TxMonitor } from "./tx-monitor/TxMonitor";
+export type {
+  ProviderLike,
+  TxHistoryQuery,
+  TxStatus,
+  TxStatusEntry,
+  WatchTxOptions,
+} from "./tx-monitor/types";
+export {
+  migrateWalletData,
+  type PocketConfig,
+  PocketWallet,
+  type WalletAccount,
+  type WalletData,
+  type WalletDataV1,
+  type WalletNamespace,
+} from "./wallet";

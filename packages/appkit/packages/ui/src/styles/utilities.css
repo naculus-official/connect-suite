@@ -1,0 +1,14 @@
+/* Framework-neutral utility layer. Keep this file dependency-free so it can
+   be imported from plain CSS, React, Vue, or Web Components. */
+:where(*, *::before, *::after) {
+  box-sizing: border-box;
+}
+
+:where(button, input, textarea, select) {
+  font: inherit;
+}
+
+:where(a) {
+  color: inherit;
+  text-decoration: inherit;
+}

@@ -1,0 +1,99 @@
+:host {
+  display: inline-flex;
+  position: relative;
+}
+
+.trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  height: 2.5rem;
+  padding: 0 0.75rem;
+  border-radius: calc(var(--radius, 0.5rem) - 2px);
+  border: 1px solid hsl(var(--border));
+  background-color: transparent;
+  color: hsl(var(--foreground));
+  font-size: 0.875rem;
+  font-family: inherit;
+  cursor: pointer;
+  min-width: 8rem;
+  transition: all 150ms;
+}
+
+.trigger:focus-visible {
+  outline: 2px solid hsl(var(--ring));
+  outline-offset: 2px;
+}
+
+.trigger:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.placeholder {
+  color: hsl(var(--muted-foreground));
+}
+
+.chevron {
+  width: 1rem;
+  height: 1rem;
+  opacity: 0.5;
+  flex-shrink: 0;
+}
+
+.options {
+  position: absolute;
+  top: calc(100% + 0.25rem);
+  left: 0;
+  z-index: 50;
+  min-width: 100%;
+  border-radius: calc(var(--radius, 0.5rem) - 2px);
+  border: 1px solid hsl(var(--border));
+  background-color: hsl(var(--popover));
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
+  padding: 0.25rem;
+  display: none;
+  max-height: 15rem;
+  overflow-y: auto;
+}
+
+.options.open {
+  display: block;
+}
+
+.option {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  padding: 0.5rem 0.5rem;
+  border-radius: 0.25rem;
+  border: none;
+  background: transparent;
+  color: hsl(var(--foreground));
+  font-size: 0.875rem;
+  cursor: pointer;
+  text-align: left;
+  font-family: inherit;
+  transition: background-color 100ms;
+}
+
+.option:hover, .option.focused {
+  background-color: hsl(var(--accent));
+  color: hsl(var(--accent-foreground));
+}
+
+.option.selected {
+  font-weight: 500;
+}
+
+.check {
+  margin-left: auto;
+  width: 1rem;
+  height: 1rem;
+  opacity: 0;
+}
+
+.option.selected .check {
+  opacity: 1;
+}

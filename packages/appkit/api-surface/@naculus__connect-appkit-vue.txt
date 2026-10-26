@@ -1,0 +1,220 @@
+@naculus/connect-appkit-vue
+.:
+  type AccountEntry
+  AppkitAccordion
+  AppkitAccountButton
+  AppkitAlertDialog
+  AppkitAvatar
+  AppkitBadge
+  AppkitButton
+  AppkitCard
+  AppkitCardContent
+  AppkitCardDescription
+  AppkitCardFooter
+  AppkitCardHeader
+  AppkitCardTitle
+  AppkitCheckbox
+  AppkitCollapsible
+  AppkitConnectButton
+  AppkitDialog
+  AppkitDropdownMenu
+  AppkitInput
+  AppkitPopover
+  AppkitProgress
+  AppkitScrollArea
+  AppkitSelect
+  AppkitSeparator
+  AppkitSkeleton
+  AppkitSwitch
+  AppkitTabs
+  AppkitToggleGroup
+  AppkitTooltip
+  AtomicSupport
+  type CapabilityClient
+  ChainCapabilities
+  type DelegationCodeReader
+  type DelegationNonceReader
+  type DeployTransactionSender
+  type EmbeddedWalletAccountView
+  type EmbeddedWalletView
+  type ERC20Reader
+  type ERC20Sender
+  type ERC20Transaction
+  type EvmTransaction
+  type ExecuteCallsAction
+  type ExecutionPreview
+  type ExecutionRoute
+  type GetCallsStatusAction
+  type GetSolanaTransactionStatusAction
+  type NativeBalanceReader
+  type PaymasterService
+  type PreviewExecutionAction
+  type SendCallsAction
+  type SendCallsOptions
+  type SendCallsStatus
+  type SendSolanaTransactionAction
+  type SendTransactionAction
+  type SendTransactionStatus
+  type SessionKeyComposableOptions
+  type ShowCallsStatusAction
+  type SignMessageAction
+  type SignSolanaTransactionAction
+  type SiwxResult
+  type SiwxSessionLike
+  type SiwxSignInAction
+  type SiwxSignInOptions
+  SolanaIdentity
+  SolanaPayer
+  SolanaRoles
+  SolanaRolesAbsence
+  SolanaRolesSource
+  SolanaSigner
+  type SolanaTransaction
+  SolanaWalletFeatures
+  type TokenBalanceReader
+  type TokenBalanceResult
+  type TokenInfo
+  type TxMonitorLike
+  type TxStatus
+  type TxStatusEntry
+  useAccount
+  type UseAccountReturn
+  useAccounts
+  type UseAccountsReturn
+  useAuthorizations
+  type UseAuthorizationsOptions
+  type UseAuthorizationsReturn
+  useBalance
+  type UseBalanceOptions
+  type UseBalanceReturn
+  useCapabilities
+  type UseCapabilitiesReturn
+  useChain
+  type UseChainReturn
+  useCompareCosts
+  type UseCompareCostsReturn
+  useConnect
+  type UseConnectReturn
+  useCreateSessionKey
+  type UseCreateSessionKeyReturn
+  useDelegate
+  type UseDelegateOptions
+  type UseDelegateReturn
+  useDelegation
+  useDelegationPolicy
+  type UseDelegationPolicyOptions
+  type UseDelegationPolicyReturn
+  type UseDelegationReturn
+  useDisconnect
+  type UseDisconnectReturn
+  useEmbeddedWallet
+  type UseEmbeddedWalletOptions
+  type UseEmbeddedWalletReturn
+  useERC20Approve
+  type UseERC20ApproveOptions
+  type UseERC20ApproveReturn
+  useERC20Transfer
+  type UseERC20TransferOptions
+  type UseERC20TransferReturn
+  useERC20TransferSimulation
+  type UseERC20TransferSimulationOptions
+  type UseERC20TransferSimulationReturn
+  useExecuteCalls
+  type UseExecuteCallsOptions
+  type UseExecuteCallsReturn
+  useExecuteRoute
+  type UseExecuteRouteReturn
+  useLastTx
+  type UseLastTxReturn
+  useLookupAddress
+  type UseLookupAddressReturn
+  useMppSession
+  type UseMppSessionReturn
+  useNotification
+  type UseNotificationOptions
+  type UseNotificationReturn
+  usePassphraseGate
+  type UsePassphraseGateReturn
+  usePaymentFetch
+  type UsePaymentFetchOptions
+  type UsePaymentFetchReturn
+  useResolveName
+  type UseResolveNameReturn
+  useRevokeSession
+  type UseRevokeSessionReturn
+  type UserOpSigner
+  type UserOpStatus
+  useRouteQuote
+  type UseRouteQuoteOptions
+  type UseRouteQuoteReturn
+  useSendCalls
+  type UseSendCallsOptions
+  type UseSendCallsReturn
+  useSendTransaction
+  type UseSendTransactionReturn
+  useSendUserOperation
+  type UseSendUserOperationOptions
+  type UseSendUserOperationReturn
+  useSendWithSession
+  type UseSendWithSessionReturn
+  useSession
+  useSessionKeys
+  type UseSessionKeysReturn
+  type UseSessionReturn
+  useSignInWithEthereum
+  type UseSignInWithEthereumOptions
+  type UseSignInWithEthereumReturn
+  useSignInWithX
+  type UseSignInWithXReturn
+  useSignMessage
+  type UseSignMessageReturn
+  useSimulateTransfer
+  type UseSimulateTransferOptions
+  type UseSimulateTransferReturn
+  useSiwxAuthSession
+  type UseSiwxAuthSessionOptions
+  type UseSiwxAuthSessionReturn
+  useSIWxLogin
+  type UseSIWxLoginReturn
+  useSIWxSession
+  type UseSIWxSessionOptions
+  type UseSIWxSessionReturn
+  useSmartAccount
+  type UseSmartAccountOptions
+  type UseSmartAccountReturn
+  useSolanaAccount
+  type UseSolanaAccountReturn
+  useSolanaBalance
+  type UseSolanaBalanceVueReturn
+  useSolanaRoles
+  type UseSolanaRolesReturn
+  useSolanaSessionKey
+  type UseSolanaSessionKeyReturn
+  useSolanaTransaction
+  type UseSolanaTransactionOptions
+  type UseSolanaTransactionReturn
+  useSwitchChain
+  type UseSwitchChainReturn
+  useTokenBalance
+  type UseTokenBalanceOptions
+  type UseTokenBalanceReturn
+  useTokenList
+  type UseTokenListOptions
+  type UseTokenListReturn
+  useTokenSearch
+  type UseTokenSearchOptions
+  type UseTokenSearchReturn
+  useTransactionSimulation
+  type UseTransactionSimulationOptions
+  type UseTransactionSimulationReturn
+  useTxHistory
+  type UseTxHistoryReturn
+  useTxMonitor
+  type UseTxMonitorReturn
+  useUserOpStatus
+  type UseUserOpStatusOptions
+  type UseUserOpStatusReturn
+  useValidateDestination
+  type UseValidateDestinationReturn
+  useX402Signer
+  type UseX402SignerReturn

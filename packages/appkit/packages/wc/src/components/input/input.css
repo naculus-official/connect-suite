@@ -1,0 +1,47 @@
+:host {
+  display: block;
+  width: 100%;
+}
+
+.input {
+  width: 100%;
+  min-width: 0;
+  height: 2.25rem;
+  border-radius: calc(var(--radius, 0.5rem) - 2px);
+  border: 1px solid hsl(var(--input));
+  background-color: transparent;
+  padding: 0 0.625rem;
+  padding-top: 0.25rem;
+  padding-bottom: 0.25rem;
+  font-size: 0.875rem;
+  font-family: inherit;
+  color: hsl(var(--foreground));
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+  transition: color 150ms, box-shadow 150ms;
+  outline: none;
+  box-sizing: border-box;
+}
+
+:host([data-centered]) .input {
+  text-align: center;
+}
+
+.input::placeholder {
+  color: hsl(var(--muted-foreground));
+}
+
+.input:focus-visible {
+  border-color: hsl(var(--ring));
+  box-shadow: 0 0 0 3px hsl(var(--ring) / 0.5);
+}
+
+.input:disabled {
+  pointer-events: none;
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.input[aria-invalid="true"] {
+  border-color: hsl(var(--destructive));
+  box-shadow: 0 0 0 3px hsl(var(--destructive) / 0.2);
+}

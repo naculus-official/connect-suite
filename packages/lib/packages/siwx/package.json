@@ -1,0 +1,69 @@
+{
+  "name": "@naculus/siwx",
+  "version": "0.14.2",
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@noble/hashes": "^2.4.0",
+    "bs58": "^6.0.0",
+    "ripple-keypairs": "^3.1.0",
+    "tweetnacl": "^1.0.3",
+    "viem": "^2.57.7"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.2",
+    "tsup": "^8.5.1",
+    "typescript": "^5.9.3"
+  },
+  "sideEffects": false,
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/naculus-official/connect-suite.git",
+    "directory": "packages/lib/packages/siwx"
+  },
+  "license": "MIT",
+  "keywords": [
+    "web3",
+    "sign-in",
+    "siwx",
+    "siwe",
+    "authentication"
+  ],
+  "description": "Sign-In With X (CAIP-122) library",
+  "homepage": "https://github.com/naculus-official/connect-suite/tree/dev/packages/lib/packages/siwx#readme",
+  "bugs": {
+    "url": "https://github.com/naculus-official/connect-suite/issues"
+  },
+  "peerDependencies": {
+    "@cosmjs/amino": "*",
+    "@polkadot/util-crypto": "*",
+    "starknet": "*"
+  },
+  "peerDependenciesMeta": {
+    "@cosmjs/amino": {
+      "optional": true
+    },
+    "@polkadot/util-crypto": {
+      "optional": true
+    },
+    "starknet": {
+      "optional": true
+    }
+  }
+}

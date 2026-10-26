@@ -1,0 +1,77 @@
+{
+  "name": "@naculus/connect-appkit-react",
+  "version": "0.14.2",
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    },
+    "./client": {
+      "types": "./dist/client.d.ts",
+      "import": "./dist/client.js",
+      "require": "./dist/client.cjs"
+    }
+  },
+  "files": [
+    "dist/",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@naculus/connect-appkit-core": "workspace:*",
+    "@naculus/connect-appkit-wc": "workspace:*",
+    "@naculus/connect-core": "workspace:^",
+    "@naculus/connector-embedded": "workspace:^",
+    "@naculus/connector-evm-injected": "workspace:^",
+    "@naculus/connector-passkeys": "workspace:^",
+    "@naculus/connector-solana": "workspace:^",
+    "@naculus/connector-walletconnect": "workspace:^",
+    "@naculus/payments-x402": "workspace:^",
+    "@naculus/siwx": "workspace:^",
+    "@naculus/wallet-engine": "workspace:^",
+    "@stencil/react-output-target": "^1.6.2",
+    "viem": "^2.56.9"
+  },
+  "peerDependencies": {
+    "react": "^18.0.0 || ^19.0.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "devDependencies": {
+    "@testing-library/react": "^16.3.3",
+    "@types/react": "^19.3.0",
+    "jsdom": "^30.0.1",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "tsup": "^9.0.0",
+    "typescript": "^6.0.3"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/naculus-official/connect-suite.git",
+    "directory": "packages/appkit/packages/react"
+  },
+  "license": "MIT",
+  "description": "React hooks and components for Naculus Connect — auto-generated wrappers for Stencil Web Components",
+  "homepage": "https://github.com/naculus-official/connect-suite/tree/dev/packages/appkit/packages/react#readme",
+  "bugs": {
+    "url": "https://github.com/naculus-official/connect-suite/issues"
+  },
+  "keywords": [
+    "web3",
+    "wallet",
+    "connect",
+    "ui",
+    "components",
+    "react"
+  ]
+}

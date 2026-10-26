@@ -1,0 +1,16 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/api-extractor/v7/api-extractor.schema.json",
+  "mainEntryPointFilePath": "<projectFolder>/packages/ui/dist/index.d.ts",
+  "bundledPackages": [],
+  "dtsRollup": {
+    "enabled": true,
+    "untrimmedFilePath": "<projectFolder>/packages/ui/dist/connect-ui.d.ts"
+  },
+  "apiReport": {
+    "enabled": true,
+    "reportFileName": "connect-ui.api.md",
+    "reportFolder": "<projectFolder>/packages/ui/etc/"
+  },
+  "docModel": { "enabled": false },
+  "tsdocMetadata": { "enabled": false }
+}

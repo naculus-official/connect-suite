@@ -1,0 +1,36 @@
+:host {
+  display: inline-flex;
+  position: relative;
+}
+
+.popover {
+  position: absolute;
+  z-index: 50;
+  min-width: 12rem;
+  border-radius: calc(var(--radius, 0.5rem) - 2px);
+  border: none;
+  background-color: hsl(var(--popover));
+  color: hsl(var(--popover-foreground));
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
+  padding: 0.25rem;
+  display: none;
+  font-family: inherit;
+}
+
+.popover.open {
+  display: block;
+}
+
+.arrow {
+  position: absolute;
+  width: 0.5rem;
+  height: 0.5rem;
+  background-color: hsl(var(--popover));
+  border: none;
+  transform: rotate(45deg);
+}
+
+.popover[data-placement="top"] .arrow { bottom: -0.3rem; border-top: none; border-left: none; }
+.popover[data-placement="bottom"] .arrow { top: -0.3rem; border-bottom: none; border-right: none; }
+.popover[data-placement="left"] .arrow { right: -0.3rem; border-left: none; border-bottom: none; }
+.popover[data-placement="right"] .arrow { left: -0.3rem; border-right: none; border-top: none; }

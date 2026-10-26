@@ -1,0 +1,68 @@
+:host {
+  display: none;
+}
+
+:host([open]) {
+  display: block;
+}
+
+dialog {
+  border: none;
+  border-radius: calc(var(--radius, 0.5rem) - 2px);
+  background-color: hsl(var(--card));
+  color: hsl(var(--card-foreground));
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+  padding: 0;
+  max-width: 28rem;
+  width: calc(100vw - 2rem);
+  max-height: 85vh;
+  overflow-y: auto;
+  margin: auto;
+  font-family: inherit;
+}
+
+dialog::backdrop {
+  background-color: rgba(0, 0, 0, 0.8);
+  backdrop-filter: blur(2px);
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1.5rem 1.5rem 0.5rem;
+}
+
+.title {
+  font-size: 1.125rem;
+  font-weight: 600;
+  line-height: 1;
+  margin: 0;
+  color: hsl(var(--foreground));
+}
+
+.close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 0.375rem;
+  border: none;
+  background: transparent;
+  color: hsl(var(--muted-foreground));
+  cursor: pointer;
+  transition: all 150ms;
+  font-size: 1rem;
+}
+
+.close:hover {
+  background-color: hsl(var(--muted));
+  color: hsl(var(--foreground));
+}
+
+.content {
+  padding: 0.5rem 1.5rem 1.5rem;
+  font-size: 0.875rem;
+  color: hsl(var(--muted-foreground));
+}

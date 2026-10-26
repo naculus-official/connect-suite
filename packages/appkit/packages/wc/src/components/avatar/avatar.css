@@ -1,0 +1,73 @@
+:host {
+  display: inline-flex;
+  position: relative;
+  flex-shrink: 0;
+  border-radius: 9999px;
+  user-select: none;
+}
+
+.avatar {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9999px;
+  overflow: hidden;
+  background-color: hsl(var(--muted));
+  color: hsl(var(--muted-foreground));
+}
+
+.avatar.size-default {
+  width: 2rem;
+  height: 2rem;
+}
+
+.avatar.size-sm {
+  width: 1.5rem;
+  height: 1.5rem;
+}
+
+.avatar.size-lg {
+  width: 2.5rem;
+  height: 2.5rem;
+}
+
+.avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 9999px;
+}
+
+.avatar .fallback {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  font-size: 0.875rem;
+  font-weight: 500;
+  background-color: hsl(var(--muted));
+  color: hsl(var(--muted-foreground));
+  position: absolute;
+  inset: 0;
+}
+
+.avatar.size-sm .fallback { font-size: 0.75rem; }
+.avatar.size-lg .fallback { font-size: 1rem; }
+
+.avatar::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 9999px;
+  border: 1px solid hsl(var(--border));
+  mix-blend-mode: darken;
+  pointer-events: none;
+}
+
+@media (prefers-color-scheme: dark) {
+  .avatar::after {
+    mix-blend-mode: lighten;
+  }
+}
