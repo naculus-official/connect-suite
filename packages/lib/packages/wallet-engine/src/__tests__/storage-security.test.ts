@@ -8,7 +8,7 @@
  *   D. EIP-2612 Permit signature construction
  *   E. Seed entropy quality verification
  *
- * No hardcoded strings — all from test-constants.
+ * The few values used here are inlined in this file (see the comment above ADDRESSES).
  */
 
 import { describe, expect, it } from "vitest";

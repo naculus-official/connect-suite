@@ -310,7 +310,9 @@ describe("E2E: Wallet Persistence", () => {
 
     await writeStoredWallet(storage, { ...imported, accounts: [] });
 
-    await expect(w.load()).rejects.toBeInstanceOf(WalletError);
+    const loadPromise = w.load();
+    await expect(loadPromise).rejects.toBeInstanceOf(WalletError);
+    await expect(loadPromise).rejects.toThrow("Stored wallet data is malformed.");
     expect(w.address).toBe(address);
   });
 
