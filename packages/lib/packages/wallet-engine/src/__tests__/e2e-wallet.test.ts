@@ -299,6 +299,17 @@ describe("E2E: Wallet Persistence", () => {
     await expect(loaded.load()).rejects.toBeInstanceOf(WalletError);
   });
 
+  it("should preserve an imported wallet when stored data is malformed", async () => {
+    const w = new PocketWallet({ storage, autoSave: false, encryptionPassphrase: TEST_PASSPHRASE });
+    const imported = await w.importPrivateKey(`0x${"ab".repeat(32)}`);
+    const address = w.address;
+
+    await writeStoredWallet(storage, { ...imported, accounts: [] });
+
+    await expect(w.load()).rejects.toBeInstanceOf(WalletError);
+    expect(w.address).toBe(address);
+  });
+
   it("should not save when autoSave is disabled", async () => {
     const w = new PocketWallet({ storage, autoSave: false, encryptionPassphrase: TEST_PASSPHRASE });
     await w.generate();
