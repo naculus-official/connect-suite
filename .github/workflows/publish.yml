@@ -147,14 +147,45 @@ jobs:
         run: |
           set -euo pipefail
           VERSION=$(node -p "require('./packages/lib/packages/core/package.json').version")
+          manifests=$(find packages/lib/packages -mindepth 2 -maxdepth 2 -name package.json | sort)
+          LIB_PACKAGES=()
+          while IFS= read -r manifest; do
+            [ -n "$manifest" ] || continue
+            name=$(node -e "const p = require('./$manifest'); if (!p.private && p.name) console.log(p.name)") || { echo "cannot read $manifest"; exit 1; }
+            if [ -n "$name" ]; then
+              LIB_PACKAGES+=("$name")
+            fi
+          done <<< "$manifests"
+          if [ "${#LIB_PACKAGES[@]}" -eq 0 ]; then
+            echo "no public lib packages found"
+            exit 1
+          fi
           for i in $(seq 1 120); do
-            if npm view "@naculus/connect-core@$VERSION" version >/dev/null 2>&1; then
-              echo "lib $VERSION is on npm"
+            all_published=true
+            last_error=""
+            for name in "${LIB_PACKAGES[@]}"; do
+              : > /tmp/npm-view-last-error
+              if output=$(npm view "$name@$VERSION" version 2> /tmp/npm-view-last-error); then
+                if [ -n "$output" ]; then
+                  :
+                else
+                  all_published=false
+                  break
+                fi
+              else
+                last_error=$(cat /tmp/npm-view-last-error)
+                cat /tmp/npm-view-last-error >&2
+                all_published=false
+                break
+              fi
+            done
+            if [ "$all_published" = true ]; then
+              echo "all lib packages at $VERSION are on npm"
               exit 0
             fi
             sleep 15
           done
-          echo "lib $VERSION did not appear on npm within 30 minutes; not publishing appkit"
+          echo "lib $VERSION did not appear on npm within 30 minutes; not publishing appkit${last_error:+: $last_error}"
           exit 1
       - name: Release preflight (dry run - configuration only)
         if: ${{ inputs.dry_run == 'true' }}

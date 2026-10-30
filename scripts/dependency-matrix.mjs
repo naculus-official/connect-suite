@@ -251,7 +251,7 @@ const staticProblems = staticCheck(pkgs);
 if (staticProblems.length) fail(staticProblems);
 console.log(`  ✓ ${publishable(pkgs).length} publishable packages, all ranges match their lockstep target`);
 
-if (STATIC_ONLY) process.exit(0);
+if (STATIC_ONLY && !REGISTRY) process.exit(0);
 
 if (REGISTRY) {
   console.log("Registry: repository metadata, then install each entry from npm");
