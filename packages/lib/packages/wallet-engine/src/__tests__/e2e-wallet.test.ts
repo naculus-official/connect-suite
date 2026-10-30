@@ -318,6 +318,27 @@ describe("E2E: Wallet Persistence", () => {
     expect(w2.hasWallet).toBe(true);
   });
 
+  it("should keep an imported wallet active when loading empty storage", async () => {
+    const w = new PocketWallet({ storage, autoSave: false, encryptionPassphrase: TEST_PASSPHRASE });
+    const imported = await w.importPrivateKey(`0x${"ab".repeat(32)}`);
+
+    expect(await storage.load()).toBeNull();
+    await expect(w.load()).resolves.toBe(true);
+    expect(w.address).toBe(imported.address);
+  });
+
+  it("should restore the stored wallet over a wallet imported in the same instance", async () => {
+    const w = new PocketWallet({ storage, autoSave: false, encryptionPassphrase: TEST_PASSPHRASE });
+    const stored = await w.generate();
+    await w.save();
+    const imported = await w.importMnemonic(TEST_MNEMONIC);
+    expect(w.address).toBe(imported.address);
+    expect(w.address).not.toBe(stored.address);
+
+    await expect(w.load()).resolves.toBe(true);
+    expect(w.address).toBe(stored.address);
+  });
+
   it("should return false from load when no wallet stored", async () => {
     const w = new PocketWallet({ storage: new MockStorage(), encryptionPassphrase: async () => "test-passphrase-only", autoSave: false });
     expect(await w.load()).toBe(false);

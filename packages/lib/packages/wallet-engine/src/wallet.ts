@@ -1060,12 +1060,9 @@ export class PocketWallet {
    * migrated shape is persisted on the next explicit save.
    */
   async load(): Promise<boolean> {
-    // An explicitly imported wallet is already live in this instance. Keep it
-    // available when mnemonic-only persistence has nothing to restore.
-    if (this.data) return true;
-
     const raw = await this._storage.load();
-    if (!raw) return false;
+    // Keep an explicitly imported wallet when storage has nothing to restore.
+    if (!raw) return this.data !== null;
 
     const data = migrateWalletData(raw);
     if (!data || data.accounts.length === 0) {

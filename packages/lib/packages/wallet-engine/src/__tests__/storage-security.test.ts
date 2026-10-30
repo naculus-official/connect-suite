@@ -11,16 +11,21 @@
  * No hardcoded strings — all from test-constants.
  */
 
-import {
-  ADDRESSES,
-  AMOUNTS,
-  DECIMALS,
-} from "@naculus/test-utils/test-constants";
 import { describe, expect, it } from "vitest";
 import { IndexedDbStorageAdapter } from "../storage/indexed-db";
 import { LocalStorageAdapter } from "../storage/local-storage";
 import type { WalletData } from "../wallet";
 import { PocketWallet } from "../wallet";
+
+// Inline copies of the values this file uses from the repo-level test
+// constants. That package is not a dependency of wallet-engine.
+const ADDRESSES = {
+  ZERO: "0x0000000000000000000000000000000000000000",
+  ALICE: "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045",
+  USDC_MAINNET: "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+} as const;
+const DECIMALS = { USDC: 6 } as const;
+const AMOUNTS = { MAX_UINT256: (1n << 256n) - 1n } as const;
 
 // Inline bigint helpers — wallet-engine has no dependency on @naculus/connect-core
 function toBigInt(value: string, decimals: number): bigint {
