@@ -1,5 +1,13 @@
 # @naculus/wallet-engine
 
+## Unreleased
+
+### Breaking
+
+- **A raw private key import is held in memory only.** `importPrivateKey` and `importPrivateKeyWithAutoSave` no longer persist the key, even with `autoSave: true`. An imported key is gone after a reload; import it again, or use a mnemonic, which is persisted.
+- **Records written without a passphrase are not read.** A stored record with no encryption envelope fails `load()` with `decryption_failed` and is not downgraded to plaintext. Re-import the wallet to write an encrypted record.
+- **Custom storage adapters always receive encrypted records.** The wallet wraps every custom adapter in `EncryptedStorageAdapter`, so a passphrase is required even when the adapter is supplied by the caller.
+
 ## 1.0.0
 
 ### Major Changes
