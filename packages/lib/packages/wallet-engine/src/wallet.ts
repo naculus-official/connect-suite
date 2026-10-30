@@ -780,6 +780,8 @@ export class PocketWallet {
    *   2 = custom/in-memory adapter
    *   3 = localStorage + AES-GCM(⚠️  encrypted but weak backend)
    *   4 = reserved for legacy unencrypted storage adapters
+   * Encrypted custom storage reports level 2 by design; level 3 is for the
+   * weaker localStorage backend.
    */
   getStorageSecurityLevel(): StorageSecurityLevel {
     const encrypted = this._storage.type === "encrypted";

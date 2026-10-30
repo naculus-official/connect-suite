@@ -296,7 +296,11 @@ describe("E2E: Wallet Persistence", () => {
     });
 
     const loaded = new PocketWallet({ storage, autoSave: false, encryptionPassphrase: TEST_PASSPHRASE });
-    await expect(loaded.load()).rejects.toBeInstanceOf(WalletError);
+    const loadPromise = loaded.load();
+    await expect(loadPromise).rejects.toBeInstanceOf(WalletError);
+    await expect(loadPromise).rejects.toThrow(
+      "Stored wallet address does not match its private key derived from its mnemonic.",
+    );
   });
 
   it("should preserve an imported wallet when stored data is malformed", async () => {
