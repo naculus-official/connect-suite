@@ -1,0 +1,22 @@
+{
+  "include": ["src", "vite.config.ts"],
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "types": ["vite/client"],
+
+    "strict": true,
+    "noEmit": true,
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+    "verbatimModuleSyntax": true,
+    "resolveJsonModule": true
+
+    // No `paths`. The whole point of this fixture is to resolve @naculus/*
+    // through node_modules from a packed tarball. A path mapping back to the
+    // SDK sources would make the typecheck meaningless.
+  }
+}

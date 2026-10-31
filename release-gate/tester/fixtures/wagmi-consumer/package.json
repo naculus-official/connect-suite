@@ -1,0 +1,28 @@
+{
+  "name": "naculus-wagmi-consumer-fixture",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "description": "Minimal real-wagmi consumer. Proves @naculus/connector-wagmi can be typechecked and production-built by a consumer that installs wagmi for real.",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "build": "vite build",
+    "verify": "pnpm exec tsc --noEmit && pnpm exec vite build"
+  },
+  "dependencies": {
+    "@naculus/connect-core": "file:../../artifacts/naculus-connect-core-0.2.0.tgz",
+    "@naculus/connector-walletconnect": "file:../../artifacts/naculus-connector-walletconnect-0.2.0.tgz",
+    "@naculus/connector-wagmi": "file:../../artifacts/naculus-connector-wagmi-0.2.0.tgz",
+    "@tanstack/react-query": "^5.0.0",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "viem": "^2.0.0",
+    "wagmi": "^3.7.3"
+  },
+  "devDependencies": {
+    "@types/react": "^19.2.0",
+    "@types/react-dom": "^19.2.0",
+    "typescript": "^5.9.3",
+    "vite": "^8.0.0"
+  }
+}

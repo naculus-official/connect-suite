@@ -30,11 +30,14 @@ import {
   repoOfPackages,
 } from './lib/package-set.mjs'
 import { groupDir, sdkRootFromArgs } from './lib/sdk-layout.mjs'
+import { getInstallSpecMap } from './lib/sdk-resolution.mjs'
 
 const here = import.meta.dirname
 const sdkRoot = sdkRootFromArgs(process.argv)
 const artifactDirArg = process.argv.find((a) => a.startsWith('--artifact-dir='))
 const artifactDir = resolve(artifactDirArg?.slice('--artifact-dir='.length) ?? join(here, 'artifacts'))
+const profileArg = process.argv.find((a) => a.startsWith('--profile='))
+const profile = profileArg?.slice('--profile='.length)
 const manifestPath = join(here, 'package.json')
 
 // Node >= 20 refuses to spawn .cmd shims without a shell (CVE-2024-27980).
@@ -72,43 +75,54 @@ function versionsByRepo(artifacts, repoOf) {
 }
 
 function main() {
-  const repoDirs = [groupDir(sdkRoot, 'connect-lib'), groupDir(sdkRoot, 'connect-appkit')]
-  const expected = new Set(
-    discoverPublicPackagesFromRepos(repoDirs).map(({ manifest }) => manifest.name),
-  )
-  const { artifacts, unreadable } = readArtifactManifests(artifactDir)
-
-  if (unreadable.length) {
-    throw new Error(
-      `unreadable artifact(s):\n  ${unreadable.join('\n  ')}`,
-    )
-  }
-
-  if (artifacts.length !== expected.size) {
-    throw new Error(`expected ${expected.size} artifacts, found ${artifacts.length}`)
-  }
-
-  const actual = new Set()
   const specs = new Map()
-  for (const { file, manifest } of artifacts) {
-    if (file !== artifactFilename(manifest.name, manifest.version)) {
-      throw new Error(`${file} does not match ${manifest.name}@${manifest.version}`)
+  if (profile !== 'npm') {
+    const repoDirs = [groupDir(sdkRoot, 'connect-lib'), groupDir(sdkRoot, 'connect-appkit')]
+    const expected = new Set(
+      discoverPublicPackagesFromRepos(repoDirs).map(({ manifest }) => manifest.name),
+    )
+    const { artifacts, unreadable } = readArtifactManifests(artifactDir)
+
+    if (unreadable.length) {
+      throw new Error(
+        `unreadable artifact(s):\n  ${unreadable.join('\n  ')}`,
+      )
     }
-    if (actual.has(manifest.name)) {
-      throw new Error(`duplicate artifact package: ${manifest.name}`)
+
+    if (artifacts.length !== expected.size) {
+      throw new Error(`expected ${expected.size} artifacts, found ${artifacts.length}`)
     }
-    actual.add(manifest.name)
-    specs.set(manifest.name, `file:./artifacts/${file}`)
+
+    const actual = new Set()
+    for (const { file, manifest } of artifacts) {
+      if (file !== artifactFilename(manifest.name, manifest.version)) {
+        throw new Error(`${file} does not match ${manifest.name}@${manifest.version}`)
+      }
+      if (actual.has(manifest.name)) {
+        throw new Error(`duplicate artifact package: ${manifest.name}`)
+      }
+      actual.add(manifest.name)
+      specs.set(manifest.name, `file:./artifacts/${file}`)
+    }
+
+    assertExactPackageSet(expected, actual, 'artifact package set')
+    // Lockstep is per SDK repo, not across repos: connect-appkit can ship a
+    // patch while connect-lib stays put (0.2.6 / 0.2.5 was the first such case).
+    for (const [repo, repoVersions] of versionsByRepo(artifacts, repoOfPackages(repoDirs))) {
+      if (repoVersions.size !== 1) {
+        throw new Error(
+          `${repo} artifact version set is not unified: ${[...repoVersions].join(', ')}`,
+        )
+      }
+    }
   }
 
-  assertExactPackageSet(expected, actual, 'artifact package set')
-  // Lockstep is per SDK repo, not across repos: connect-appkit can ship a
-  // patch while connect-lib stays put (0.2.6 / 0.2.5 was the first such case).
-  for (const [repo, repoVersions] of versionsByRepo(artifacts, repoOfPackages(repoDirs))) {
-    if (repoVersions.size !== 1) {
-      throw new Error(
-        `${repo} artifact version set is not unified: ${[...repoVersions].join(', ')}`,
-      )
+  // Profile mode uses the centrally validated spec map. The artifact-driven
+  // behavior above remains unchanged when --profile is omitted.
+  if (profile) {
+    specs.clear()
+    for (const [name, spec] of Object.entries(getInstallSpecMap(profile))) {
+      specs.set(name, spec.startsWith('./artifacts/') ? `file:${spec}` : spec)
     }
   }
 

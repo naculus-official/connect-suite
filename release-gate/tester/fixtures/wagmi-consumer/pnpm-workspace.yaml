@@ -1,0 +1,17 @@
+# Standalone install root. This fixture is deliberately NOT part of the parent
+# tester's workspace — the parent has no `packages:` key, so nothing here is
+# picked up by it, and both keep their own lockfile and node_modules.
+#
+# The overrides below are load-bearing, not decoration. `pnpm pack` rewrites
+# `workspace:*` into a fixed version, so @naculus/connector-wagmi ships
+# declaring a fixed published version. Without an override that
+# specifier resolves from the public registry and the fixture would quietly
+# validate published code instead of the tarball under test.
+#
+# As of pnpm 11.20 `overrides` is read from this file only; putting it in
+# package.json fails silently.
+
+overrides:
+  '@naculus/connect-core': 'file:../../artifacts/naculus-connect-core-0.2.0.tgz'
+  '@naculus/connector-walletconnect': 'file:../../artifacts/naculus-connector-walletconnect-0.2.0.tgz'
+  '@naculus/connector-wagmi': 'file:../../artifacts/naculus-connector-wagmi-0.2.0.tgz'
