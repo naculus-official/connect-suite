@@ -1,0 +1,120 @@
+name: Private tester CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      run-release-gates:
+        description: Run Gate 1–3 against the configured private SDK checkouts
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  bootstrap:
+    name: Bootstrap / build (${{ matrix.os }}, Node ${{ matrix.node }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        node: ['20.x', '22.x']
+    steps:
+      - name: Check out private tester
+        uses: actions/checkout@v4
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11.1.2
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: pnpm
+      - name: Install locked dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Build clean consumer
+        run: pnpm build
+
+  release-gates:
+    name: Release gates (${{ matrix.os }})
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.run-release-gates == true }}
+    needs: bootstrap
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      - name: Check out private tester
+        uses: actions/checkout@v4
+      - name: Validate private SDK repository configuration
+        shell: bash
+        env:
+          LIB_REPOSITORY: ${{ vars.NACULUS_CONNECT_LIB_REPOSITORY }}
+          APPKIT_REPOSITORY: ${{ vars.NACULUS_CONNECT_APPKIT_REPOSITORY }}
+          SDK_READ_TOKEN: ${{ secrets.NACULUS_READ_TOKEN }}
+        run: |
+          test -n "$LIB_REPOSITORY" || { echo "Set repository variable NACULUS_CONNECT_LIB_REPOSITORY"; exit 1; }
+          test -n "$APPKIT_REPOSITORY" || { echo "Set repository variable NACULUS_CONNECT_APPKIT_REPOSITORY"; exit 1; }
+          test -n "$SDK_READ_TOKEN" || { echo "Set secret NACULUS_READ_TOKEN"; exit 1; }
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11.1.2
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20.x
+          cache: pnpm
+      - name: Check out connect-lib
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ vars.NACULUS_CONNECT_LIB_REPOSITORY }}
+          token: ${{ secrets.NACULUS_READ_TOKEN }}
+          path: sdk/connect-lib
+      - name: Check out connect-appkit
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ vars.NACULUS_CONNECT_APPKIT_REPOSITORY }}
+          token: ${{ secrets.NACULUS_READ_TOKEN }}
+          path: sdk/connect-appkit
+      - name: Install and build connect-lib
+        shell: bash
+        run: |
+          pnpm --dir sdk/connect-lib install --frozen-lockfile
+          pnpm --dir sdk/connect-lib build
+      - name: Pack connect-lib for the local appkit workspace
+        shell: bash
+        run: |
+          SDK_ROOT="${{ github.workspace }}/sdk"
+          node release-gate/pack.mjs --sdk-root="$SDK_ROOT" --only=connect-lib --skip-build
+      - name: Wire local SDK artifacts into appkit
+        shell: bash
+        run: |
+          SDK_ROOT="${{ github.workspace }}/sdk"
+          node release-gate/wire-local-sdk.mjs --sdk-root="$SDK_ROOT"
+      - name: Install appkit dependencies from local artifacts
+        shell: bash
+        run: pnpm --dir sdk/connect-appkit install --no-frozen-lockfile
+      - name: Build connect-appkit
+        shell: bash
+        run: pnpm --dir sdk/connect-appkit build
+      - name: Run complete OPDCA release gate
+        shell: bash
+        run: |
+          SDK_ROOT="${{ github.workspace }}/sdk"
+          # Both workspaces are already built above. Repacking with
+          # --skip-build avoids deleting the tarballs appkit used during its
+          # install and avoids a second dependency-resolution pass.
+          node release-gate/pack.mjs --sdk-root="$SDK_ROOT" --skip-build
+          node release-gate/gate1-artifacts.mjs artifacts
+          node release-gate/version-transition-install.mjs --sdk-root="$SDK_ROOT"
+          node release-gate/release-coherence.mjs --sdk-root="$SDK_ROOT"
+          pnpm gate:2
+          pnpm gate:3

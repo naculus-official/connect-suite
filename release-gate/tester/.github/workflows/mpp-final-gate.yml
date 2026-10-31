@@ -1,0 +1,50 @@
+name: MPP isolated final gate
+
+on:
+  push:
+    branches: [feat/senderpay-zerodev-7702]
+    paths:
+      - .github/workflows/mpp-final-gate.yml
+      - release-gate/isolated-mpp/**
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mpp-isolated-final-gate
+  cancel-in-progress: false
+
+jobs:
+  register:
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 2
+    steps:
+      - run: echo 'First push registers the workflow. Manually rerun this run to start verification without merging to master.'
+
+  gate:
+    if: github.event_name == 'workflow_dispatch' || github.run_attempt > 1
+    needs: register
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+          path: sources/naculus-locale-frontend-tester
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          repository: naculus-official/connect-lib
+          ref: 568db6b663dd8a7b7464465fec464af2b6de2f66
+          persist-credentials: false
+          path: sources/connect-lib
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          repository: naculus-official/connect-appkit
+          ref: 12ae1632356dfc924452cb5385c43b7164607dc0
+          persist-credentials: false
+          path: sources/connect-appkit
+      - name: Prepare trusted tools and offline dependency cache (no lifecycle scripts)
+        run: node sources/naculus-locale-frontend-tester/release-gate/isolated-mpp/prepare.mjs
+      - name: Verify containment then run offline packed consumer gate
+        run: node sources/naculus-locale-frontend-tester/release-gate/isolated-mpp/run.mjs
