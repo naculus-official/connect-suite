@@ -110,6 +110,7 @@ class SolanaConnectorImpl implements UniversalConnector {
   private activeSession: SolanaConnectorSession | null = null;
   private attachedListener?: {
     wallet: DiscoveredSolanaWallet;
+    event: string;
     handler: (...args: unknown[]) => void;
   };
   private readonly accountsSubscribers = new Set<
@@ -197,6 +198,7 @@ class SolanaConnectorImpl implements UniversalConnector {
         () =>
           this.activeSession?.session.namespaces.solana?.chains[0] ??
           this.defaultChain,
+        () => this.activeSession?.publicKey,
       );
     } catch {
       // A Wallet Standard registration can be emitted before all required
@@ -504,7 +506,7 @@ class SolanaConnectorImpl implements UniversalConnector {
     const remove = provider.off ?? provider.removeListener;
     if (!remove) return;
     try {
-      remove.call(provider, "accountChanged", attached.handler);
+      remove.call(provider, attached.event, attached.handler);
     } catch {
       // A provider that throws on detach must not block disconnect.
     }
@@ -514,11 +516,39 @@ class SolanaConnectorImpl implements UniversalConnector {
     // Re-connecting to the same or a different wallet must not stack handlers.
     this.detachEventListeners();
 
+    // Wallet Standard has no `accountChanged`; account switches arrive as a
+    // `standard:events` "change" carrying `{ accounts }`. Legacy injected
+    // providers keep their own `accountChanged`.
+    const isStandard = wallet.source === "wallet-standard";
+    const event = isStandard ? "change" : "accountChanged";
+
     const accountsHandler = (...args: unknown[]) => {
       const active = this.activeSession;
       if (!active || active.wallet !== wallet) return;
 
-      const next = readSolanaAccount(args[0]);
+      let next: string | null;
+      if (isStandard) {
+        const payload = args[0];
+        // No `accounts` key: a chain or feature change, not an account one.
+        if (!payload || typeof payload !== "object" || !("accounts" in payload))
+          return;
+        const listed = (payload as { accounts?: unknown }).accounts;
+        // Wallet Standard accounts carry `address` beside raw `publicKey`
+        // bytes, so the address is read directly.
+        const addresses = (Array.isArray(listed) ? listed : [])
+          .map((a) =>
+            a && typeof (a as { address?: unknown }).address === "string"
+              ? (a as { address: string }).address
+              : null,
+          )
+          .filter((a): a is string => !!a);
+        // Keep the current account while the wallet still lists it.
+        next = addresses.includes(active.publicKey)
+          ? active.publicKey
+          : (addresses[0] ?? null);
+      } else {
+        next = readSolanaAccount(args[0]);
+      }
       if (!next || !isValidAddress(next, "solana")) {
         // No usable account means the wallet is no longer authorizing us.
         this.activeSession = null;
@@ -537,8 +567,8 @@ class SolanaConnectorImpl implements UniversalConnector {
       this.notifyAccountsChanged(namespace.accounts);
     };
 
-    wallet.provider.on("accountChanged", accountsHandler);
-    this.attachedListener = { wallet, handler: accountsHandler };
+    wallet.provider.on(event, accountsHandler);
+    this.attachedListener = { wallet, event, handler: accountsHandler };
   }
 
   /**
@@ -744,6 +774,16 @@ class SolanaConnectorImpl implements UniversalConnector {
     }
     if (ns.chains) {
       ns.chains = [chainId];
+    }
+    // Signing reads the chain from the live session, so it must change too
+    // when the caller passes a copy (a restored or cloned session).
+    const active = this.activeSession;
+    const activeNs =
+      active && active.session.id === session.id
+        ? active.session.namespaces.solana
+        : undefined;
+    if (activeNs && activeNs !== ns) {
+      activeNs.chains = [chainId];
     }
   }
 

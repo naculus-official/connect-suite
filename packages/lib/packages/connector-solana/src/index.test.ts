@@ -986,3 +986,124 @@ describe("SolanaConnector — Wallet Standard discovery", () => {
     });
   });
 });
+
+/**
+ * A Wallet Standard wallet connected through the connector: account switches
+ * arrive as a `standard:events` "change", and the chain used for
+ * sign-and-send is the one switchChain set.
+ */
+describe("SolanaConnector — Wallet Standard session sync", () => {
+  const FIRST = {
+    address: "7EcDhSYGxXyscszYEp35KHN8vvw3svAuLKTzXwCFLtPb",
+    publicKey: new Uint8Array(32).fill(1),
+  };
+  const SECOND = {
+    address: "9WzDXwBbmkg8ZTbNMqUxvQRAyrZzDsGYdLVL9zYtAWWM",
+    publicKey: new Uint8Array(32).fill(2),
+  };
+  const DEVNET = "solana:EtWTRABZaYq6iMfeYKouRu166VU2xqa1";
+
+  let connector: SolanaConnector;
+
+  function standardWallet() {
+    const listeners: Record<string, ((p: unknown) => void)[]> = {};
+    const signMessage = vi.fn(async () => [
+      { signedMessage: new Uint8Array([1]), signature: new Uint8Array(64) },
+    ]);
+    const signAndSendTransaction = vi.fn(async () => [
+      { signature: new Uint8Array(64) },
+    ]);
+    const wallet = {
+      name: "Std",
+      icon: "",
+      version: "1.0.0",
+      accounts: [FIRST] as { address: string; publicKey: Uint8Array }[],
+      features: {
+        "standard:connect": {
+          connect: vi.fn(async () => ({ accounts: [FIRST] })),
+        },
+        "standard:events": {
+          on: (event: string, fn: (p: unknown) => void) => {
+            const list = listeners[event] ?? [];
+            list.push(fn);
+            listeners[event] = list;
+            return () => {
+              listeners[event] = (listeners[event] ?? []).filter(
+                (f) => f !== fn,
+              );
+            };
+          },
+        },
+        "solana:signMessage": { signMessage },
+        "solana:signAndSendTransaction": { signAndSendTransaction },
+      },
+    };
+    const emit = (event: string, payload: unknown) => {
+      for (const fn of listeners[event] ?? []) fn(payload);
+    };
+    return { wallet, emit, signMessage, signAndSendTransaction };
+  }
+
+  beforeEach(() => {
+    connector = createSolanaConnector();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: vi
+          .fn()
+          .mockResolvedValue({ result: "5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp" }),
+      }),
+    );
+  });
+
+  afterEach(() => {
+    connector.clear();
+    vi.unstubAllGlobals();
+  });
+
+  it("follows a Wallet Standard change event to the new account", async () => {
+    const { wallet, emit, signMessage } = standardWallet();
+    connector.registerWallet(wallet);
+    const session = await connector.connect("wallet-standard-std");
+    const seen: string[][] = [];
+    connector.onAccountsChanged(session, (a) => seen.push(a));
+
+    wallet.accounts = [SECOND];
+    emit("change", { accounts: [SECOND] });
+
+    expect(session.namespaces.solana?.accounts[0]).toContain(SECOND.address);
+    expect(seen).toHaveLength(1);
+    await connector.signMessage(session, { message: "hi" });
+    expect(
+      (signMessage.mock.calls[0] as unknown[])[0] as { account: unknown },
+    ).toHaveProperty("account", SECOND);
+  });
+
+  it("ignores a change event without accounts", async () => {
+    const { wallet, emit } = standardWallet();
+    connector.registerWallet(wallet);
+    const session = await connector.connect("wallet-standard-std");
+    emit("change", { chains: ["solana:devnet"] });
+    expect(session.namespaces.solana?.accounts[0]).toContain(FIRST.address);
+  });
+
+  it("signs and sends on the chain switchChain set, even on a session copy", async () => {
+    const { wallet, signAndSendTransaction } = standardWallet();
+    connector.registerWallet(wallet);
+    const session = await connector.connect("wallet-standard-std");
+    const copy = structuredClone(session);
+
+    await connector.switchChain(copy, DEVNET);
+    await connector.sendTransaction(copy, {
+      transaction: { serialized: [1, 2, 3] },
+    });
+
+    expect(
+      (signAndSendTransaction.mock.calls[0] as unknown[])[0] as {
+        chain: unknown;
+      },
+    ).toHaveProperty("chain", "solana:devnet");
+  });
+});

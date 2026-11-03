@@ -44,6 +44,13 @@ export function createProviderFromWalletStandard(
   wallet: WalletStandardWallet,
   /** The session's CAIP-2 chain, read at call time for sign-and-send. */
   getChain?: () => string | undefined,
+  /**
+   * The session's current address, read at call time for every signature.
+   *
+   * The connector keeps it in sync with Wallet Standard `change` events; the
+   * account handed to the wallet must be the one the session advertises.
+   */
+  getAddress?: () => string | undefined,
 ): SolanaProvider {
   const f = wallet.features as Record<string, any>;
   const requireFeature = <T>(name: string): T => {
@@ -95,15 +102,38 @@ export function createProviderFromWalletStandard(
    * `accounts`, so the wallet's object is preferred over the copy from connect.
    */
   const currentAccount = (): WalletStandardAccount => {
-    const account =
-      (connectedAccount &&
-        wallet.accounts?.find(
-          (a) => a.address === connectedAccount?.address,
-        )) ??
-      connectedAccount ??
-      wallet.accounts?.[0];
-    if (!account) throw new Error("Wallet Standard wallet has no account");
+    const address = getAddress?.() ?? connectedAccount?.address;
+    if (!address) {
+      throw new Error("Wallet Standard wallet has no connected account");
+    }
+    // No fallback to a stale object or to accounts[0]: signing with any
+    // account other than the session's would produce a signature for an
+    // address the caller does not expect.
+    const account = wallet.accounts?.find((a) => a.address === address);
+    if (!account) {
+      throw new Error(
+        `Wallet Standard wallet no longer authorizes account ${address}`,
+      );
+    }
     return account;
+  };
+  /**
+   * Refresh `connectedAccount` from a Wallet Standard `change` payload.
+   *
+   * A payload without `accounts` is a chain or feature change and leaves the
+   * account alone. The current account is kept while the wallet still lists
+   * it; otherwise the first listed account becomes current, or none.
+   */
+  const refreshFromChange = (payload: unknown) => {
+    if (!payload || typeof payload !== "object" || !("accounts" in payload))
+      return;
+    const listed = (payload as { accounts?: unknown }).accounts;
+    const accounts = Array.isArray(listed)
+      ? listed.filter(isWalletStandardAccount)
+      : [];
+    connectedAccount =
+      accounts.find((a) => a.address === connectedAccount?.address) ??
+      accounts[0];
   };
   /** Unsubscribe callbacks returned by `standard:events`, keyed by handler. */
   const unsubscribes = new Map<(...args: unknown[]) => void, (() => void)[]>();
@@ -139,20 +169,22 @@ export function createProviderFromWalletStandard(
     async signMessage(message) {
       if (!signMessageFeature)
         throw new Error("Wallet does not support solana:signMessage");
-      const [result] = await signMessageFeature.signMessage({
+      const output = await signMessageFeature.signMessage({
         account: currentAccount(),
         message,
       });
-      return { signature: result.signature };
+      return {
+        signature: requireOutput(output, "signature", isSignatureBytes),
+      };
     },
     async signTransaction(tx) {
       if (!signTxFeature)
         throw new Error("Wallet does not support solana:signTransaction");
-      const [result] = await signTxFeature.signTransaction({
+      const output = await signTxFeature.signTransaction({
         account: currentAccount(),
         transaction: tx,
       });
-      return result.signedTransaction;
+      return requireOutput(output, "signedTransaction", isNonEmptyBytes);
     },
     async signAllTransactions(txs) {
       if (!signAllTxFeature)
@@ -171,20 +203,33 @@ export function createProviderFromWalletStandard(
         throw new Error(
           "No Wallet Standard chain for solana:signAndSendTransaction",
         );
-      const [result] = await signSendTxFeature.signAndSendTransaction({
+      const output = await signSendTxFeature.signAndSendTransaction({
         account: currentAccount(),
         transaction: tx,
         chain,
       });
       // Wallet Standard returns raw signature bytes; callers expect base58.
-      return { signature: encodeBase58(result.signature) };
+      return {
+        signature: encodeBase58(
+          requireOutput(output, "signature", isSignatureBytes),
+        ),
+      };
     },
     on(event, handler) {
       // `standard:events` returns an unsubscribe function. Discarding it left
       // the adapter with no way to detach, so a reconnect stacked another
       // handler on the same wallet and every account change was reported once
       // per connect that had ever happened.
-      const off = eventsFeature?.on?.(event, handler);
+      // A `change` payload also refreshes the account this adapter signs
+      // with, before the connector's own handler sees it.
+      const listener =
+        event === "change"
+          ? (...args: unknown[]) => {
+              refreshFromChange(args[0]);
+              handler(...args);
+            }
+          : handler;
+      const off = eventsFeature?.on?.(event, listener);
       if (typeof off === "function") {
         let existing = unsubscribes.get(handler);
         if (!existing) {
@@ -212,8 +257,43 @@ type WalletStandardAccount = WalletStandardWallet["accounts"][number];
 const BASE58_ALPHABET =
   "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
 
+/** An ed25519 signature: exactly 64 bytes. */
+function isSignatureBytes(value: unknown): value is Uint8Array {
+  return value instanceof Uint8Array && value.length === 64;
+}
+
+function isNonEmptyBytes(value: unknown): value is Uint8Array {
+  return value instanceof Uint8Array && value.length > 0;
+}
+
+/**
+ * Read one byte field from a Wallet Standard output array.
+ *
+ * Outputs are `[{ ...fields }]`, one per input. Anything else — an empty
+ * array, a bare object, a missing or wrongly sized field — is refused here so
+ * it never reaches encodeBase58 or the caller as if it were a signature.
+ */
+function requireOutput(
+  output: unknown,
+  field: string,
+  valid: (value: unknown) => value is Uint8Array,
+): Uint8Array {
+  const first = Array.isArray(output) ? output[0] : undefined;
+  const value =
+    first && typeof first === "object"
+      ? (first as Record<string, unknown>)[field]
+      : undefined;
+  if (!valid(value)) {
+    throw new Error(`Wallet returned malformed output: invalid ${field}`);
+  }
+  return value;
+}
+
 /** Bitcoin-alphabet base58, as Solana uses for signatures. */
 function encodeBase58(bytes: Uint8Array): string {
+  if (!(bytes instanceof Uint8Array)) {
+    throw new TypeError("encodeBase58 requires a Uint8Array");
+  }
   const digits: number[] = [];
   for (const byte of bytes) {
     let carry = byte;

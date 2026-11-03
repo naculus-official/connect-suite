@@ -170,10 +170,11 @@ describe("createProviderFromWalletStandard", () => {
     });
 
     it("passes solana:signAndSendTransaction one { account, transaction, chain } input", async () => {
-      // Bitcoin base58 test vector: 00 00 28 7f b4 cd -> 11233QC4.
-      const signAndSendTransaction = vi.fn(async () => [
-        { signature: new Uint8Array([0, 0, 0x28, 0x7f, 0xb4, 0xcd]) },
-      ]);
+      // Bitcoin base58 test vector 00 00 28 7f b4 cd -> 11233QC4, padded
+      // with leading zero bytes to a 64-byte signature (one "1" per zero).
+      const sig = new Uint8Array(64);
+      sig.set([0x28, 0x7f, 0xb4, 0xcd], 60);
+      const signAndSendTransaction = vi.fn(async () => [{ signature: sig }]);
       const provider = await connected({
         "solana:signAndSendTransaction": { signAndSendTransaction },
       });
@@ -183,7 +184,7 @@ describe("createProviderFromWalletStandard", () => {
       expect(signAndSendTransaction.mock.calls[0]).toEqual([
         { account: ACCOUNT, transaction, chain: "solana:mainnet" },
       ]);
-      expect(res.signature).toBe("11233QC4");
+      expect(res.signature).toBe(`${"1".repeat(60)}233QC4`);
     });
 
     it("refuses to sign-and-send without a known chain", async () => {
@@ -196,6 +197,154 @@ describe("createProviderFromWalletStandard", () => {
         provider.signAndSendTransaction(new Uint8Array([1])),
       ).rejects.toThrow(/chain/);
       expect(signAndSendTransaction).not.toHaveBeenCalled();
+    });
+  });
+  /**
+   * Wallet output is untrusted. An empty array or a wrongly sized field used
+   * to reach encodeBase58 or the caller as if it were a signature.
+   */
+  describe("Wallet Standard output validation", () => {
+    async function connected(features: Record<string, unknown>) {
+      const w = makeWallet(features) as unknown as Record<string, unknown>;
+      w.accounts = [ACCOUNT];
+      const provider = createProviderFromWalletStandard(
+        w as never,
+        () => "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp",
+      );
+      await provider.connect();
+      return provider;
+    }
+
+    it.each([
+      ["an empty array", []],
+      ["a bare object", { signature: new Uint8Array(64) }],
+      ["a short signature", [{ signature: new Uint8Array(10) }]],
+      ["a non-Uint8Array signature", [{ signature: Array(64).fill(1) }]],
+    ])("signMessage rejects %s", async (_label, output) => {
+      const provider = await connected({
+        "solana:signMessage": { signMessage: vi.fn(async () => output) },
+      });
+      await expect(provider.signMessage(new Uint8Array([1]))).rejects.toThrow(
+        /malformed output/,
+      );
+    });
+
+    it.each([
+      ["an empty array", []],
+      ["an empty signedTransaction", [{ signedTransaction: new Uint8Array() }]],
+      ["a missing signedTransaction", [{}]],
+    ])("signTransaction rejects %s", async (_label, output) => {
+      const provider = await connected({
+        "solana:signTransaction": {
+          signTransaction: vi.fn(async () => output),
+        },
+      });
+      await expect(
+        provider.signTransaction(new Uint8Array([1])),
+      ).rejects.toThrow(/malformed output/);
+    });
+
+    it.each([
+      ["an empty array", []],
+      ["a short signature", [{ signature: new Uint8Array(6) }]],
+      ["a string signature", [{ signature: "abc" }]],
+    ])("signAndSendTransaction rejects %s", async (_label, output) => {
+      const provider = await connected({
+        "solana:signAndSendTransaction": {
+          signAndSendTransaction: vi.fn(async () => output),
+        },
+      });
+      await expect(
+        provider.signAndSendTransaction(new Uint8Array([1])),
+      ).rejects.toThrow(/malformed output/);
+    });
+  });
+
+  /**
+   * Wallet Standard reports account switches as a `standard:events` "change"
+   * carrying `{ accounts }`; there is no `accountChanged`.
+   */
+  describe("Wallet Standard account changes", () => {
+    const OTHER = {
+      address: "7EcDhSYGxXyscszYEp35KHN8vvw3svAuLKTzXwCFLtPb",
+      publicKey: new Uint8Array(32).fill(9),
+    };
+
+    function walletWithEvents() {
+      const listeners: Record<string, ((p: unknown) => void)[]> = {};
+      const signMessage = vi.fn(async () => [
+        { signedMessage: new Uint8Array([1]), signature: new Uint8Array(64) },
+      ]);
+      const w = makeWallet({
+        "solana:signMessage": { signMessage },
+        "standard:events": {
+          on: (event: string, fn: (p: unknown) => void) => {
+            const list = listeners[event] ?? [];
+            list.push(fn);
+            listeners[event] = list;
+            return () => {};
+          },
+        },
+      }) as unknown as Record<string, unknown>;
+      w.accounts = [ACCOUNT];
+      const emit = (event: string, payload: unknown) => {
+        for (const fn of listeners[event] ?? []) fn(payload);
+      };
+      return { w, signMessage, emit };
+    }
+
+    it("signs with the account a change event switched to", async () => {
+      const { w, signMessage, emit } = walletWithEvents();
+      const provider = createProviderFromWalletStandard(w as never);
+      await provider.connect();
+      provider.on("change", () => {});
+      w.accounts = [OTHER];
+      emit("change", { accounts: [OTHER] });
+
+      await provider.signMessage(new Uint8Array([1]));
+      expect(signMessage.mock.calls[0]).toEqual([
+        { account: OTHER, message: new Uint8Array([1]) },
+      ]);
+    });
+
+    it("signs with the account matching the session address", async () => {
+      const { w, signMessage } = walletWithEvents();
+      w.accounts = [ACCOUNT, OTHER];
+      let address = ADDR;
+      const provider = createProviderFromWalletStandard(
+        w as never,
+        undefined,
+        () => address,
+      );
+      await provider.connect();
+      address = OTHER.address;
+
+      await provider.signMessage(new Uint8Array([1]));
+      expect(signMessage.mock.calls[0]).toEqual([
+        { account: OTHER, message: new Uint8Array([1]) },
+      ]);
+    });
+
+    it("refuses to sign for an account the wallet no longer lists", async () => {
+      const { w, signMessage } = walletWithEvents();
+      const provider = createProviderFromWalletStandard(w as never);
+      await provider.connect();
+      w.accounts = [OTHER];
+
+      await expect(provider.signMessage(new Uint8Array([1]))).rejects.toThrow(
+        /no longer authorizes/,
+      );
+      expect(signMessage).not.toHaveBeenCalled();
+    });
+
+    it("refuses to sign before any account is connected", async () => {
+      const { w, signMessage } = walletWithEvents();
+      const provider = createProviderFromWalletStandard(w as never);
+
+      await expect(provider.signMessage(new Uint8Array([1]))).rejects.toThrow(
+        /no connected account/,
+      );
+      expect(signMessage).not.toHaveBeenCalled();
     });
   });
 });
