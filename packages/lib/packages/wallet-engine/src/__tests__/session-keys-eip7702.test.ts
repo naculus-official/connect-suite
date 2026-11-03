@@ -51,6 +51,7 @@ const USDC = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913" as const;
 const PAYEE = "0x2222222222222222222222222222222222222222" as const;
 const OTHER = "0x3333333333333333333333333333333333333333" as const;
 const TX_HASH = `0x${"ff".repeat(32)}`;
+const BLOCK_TIME = Math.floor(Date.now() / 1000);
 const DELEGATED_CODE = `0xef0100${DELEGATION_FRAMEWORK.eip7702StatelessDeleGator.slice(2).toLowerCase()}`;
 
 const scope = {
@@ -66,7 +67,10 @@ function transferData(to: string, amount: bigint): `0x${string}` {
   return `0xa9059cbb${to.slice(2).padStart(64, "0")}${amount.toString(16).padStart(64, "0")}`;
 }
 
-function mockRpc(code: string | null = DELEGATED_CODE) {
+function mockRpc(
+  code: string | null = DELEGATED_CODE,
+  block: unknown = { timestamp: `0x${BLOCK_TIME.toString(16)}` },
+) {
   vi.mocked(estimateFees).mockResolvedValue({
     type: "eip1559",
     maxFeePerGas: 30_000_000_000n,
@@ -85,7 +89,9 @@ function mockRpc(code: string | null = DELEGATED_CODE) {
             ? "0x30d40"
             : body.method === "eth_sendRawTransaction"
               ? TX_HASH
-              : null;
+              : body.method === "eth_getBlockByNumber"
+                ? block
+                : null;
     return {
       ok: true,
       json: async () => ({ jsonrpc: "2.0", id: body.id, result }),
@@ -278,5 +284,67 @@ describe("PocketWallet eip7702 session keys", () => {
     await expect(
       w.sendWithSession(roomy.id, { to: USDC, data: transferData(PAYEE, 1n) }),
     ).resolves.toMatchObject({ hash: TX_HASH });
+  });
+
+  it("counts a period-limited redemption at the latest block's time", async () => {
+    const w = await wallet();
+    mockRpc();
+    // The period's second window starts 30 s after the block: inside the
+    // 60 s inclusion margin, so signing must be refused.
+    const near = await w.createSessionKey({
+      ...(scope as object),
+      periodLimits: {
+        [USDC]: {
+          amount: 500n,
+          seconds: 3_600,
+          start: BLOCK_TIME + 30 - 3_600,
+        },
+      },
+    } as never);
+    const info = await w.createSessionKey({
+      ...(scope as object),
+      periodLimits: {
+        [USDC]: { amount: 500n, seconds: 3_600, start: BLOCK_TIME - 100 },
+      },
+    } as never);
+    const calls = mockRpc();
+    const spy = vi.spyOn(manager(w), "signTransactionDelegationRedemption");
+
+    await expect(
+      w.sendWithSession(info.id, { to: USDC, data: transferData(PAYEE, 400n) }),
+    ).resolves.toMatchObject({ hash: TX_HASH });
+    expect(
+      calls.find((c) => c.method === "eth_getBlockByNumber")?.params,
+    ).toEqual(["latest", false]);
+    expect(spy.mock.calls[0]![4]).toEqual({
+      timestamp: BLOCK_TIME,
+      inclusionMarginSeconds: 60,
+    });
+
+    const nearCalls = mockRpc();
+    await expect(
+      w.sendWithSession(near.id, { to: USDC, data: transferData(PAYEE, 1n) }),
+    ).rejects.toMatchObject({
+      code: "session_key_scope_exceeded",
+      message: expect.stringContaining("next period"),
+    });
+    expect(nearCalls.map((c) => c.method)).not.toContain(
+      "eth_sendRawTransaction",
+    );
+  });
+
+  it("refuses a redemption when the latest block has no usable timestamp", async () => {
+    const w = await wallet();
+    mockRpc();
+    const info = await w.createSessionKey(scope);
+    for (const block of [null, {}, { timestamp: "0x0" }, { timestamp: 12 }]) {
+      const calls = mockRpc(DELEGATED_CODE, block);
+      await expect(
+        w.sendWithSession(info.id, { to: USDC, data: transferData(PAYEE, 1n) }),
+      ).rejects.toMatchObject({ code: "invalid_input" });
+      expect(calls.map((c) => c.method)).not.toContain(
+        "eth_sendRawTransaction",
+      );
+    }
   });
 });

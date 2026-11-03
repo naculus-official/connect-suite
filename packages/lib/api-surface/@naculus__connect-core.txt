@@ -410,6 +410,7 @@
   type SolanaSessionPayment
   solanaTransactionId
   type SolanaTransferSettlementExpected
+  type SpendPeriodUsage
   type SpendRefusal
   type SpendRequest
   type SpendVerdict

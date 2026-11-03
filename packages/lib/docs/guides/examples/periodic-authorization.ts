@@ -62,7 +62,8 @@ export async function preview(authorization: Authorization) {
     at: Math.floor(Date.now() / 1000),
     spentSoFar: 0n,
     countSoFar: 0,
-    periodSpentSoFar: 0n,
+    // periodIndex of `at` relative to the period start; 0 = no spend yet.
+    periodUsage: { periodIndex: 0, spent: 0n },
   }); // { allow: true, grant: 0 }
 }
 

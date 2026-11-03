@@ -87,6 +87,9 @@ type OffchainAuthorizationVerifier = (input: {
   signerAddress: `0x${string}`;
 }) => boolean | Promise<boolean>;
 
+/** The time a period-limited spend is counted at, in seconds. */
+type PeriodClock = { at: number; marginSeconds: number };
+
 type TokenSpend = {
   tokenAddress: `0x${string}`;
   amount: bigint;
@@ -1032,6 +1035,7 @@ export class SessionKeyManager {
       gas?: string;
     },
     execution: FrameworkExecution,
+    chainTime?: { timestamp: number; inclusionMarginSeconds: number },
   ): Promise<`0x${string}`> {
     return this.withStoredSession(sessionId, async (stored) => {
       this.validateSessionStatus(stored);
@@ -1055,15 +1059,57 @@ export class SessionKeyManager {
           "The transaction is not this key's redemption for the execution",
         );
       }
+      const hasPeriods =
+        Object.keys(stored.scope.periodLimits ?? {}).length > 0;
+      if (
+        hasPeriods &&
+        (chainTime === undefined ||
+          !Number.isSafeInteger(chainTime.timestamp) ||
+          chainTime.timestamp <= 0 ||
+          !Number.isSafeInteger(chainTime.inclusionMarginSeconds) ||
+          chainTime.inclusionMarginSeconds < 0)
+      ) {
+        throw createSessionKeyError(
+          "session_key_invalid_input",
+          "A period-limited redemption needs chainTime { timestamp, inclusionMarginSeconds } from the chain",
+        );
+      }
+      if (hasPeriods && chainTime) {
+        // A far-future chain timestamp would store a period index ahead of
+        // the real chain period and lock the key; bound it to one period
+        // (the shortest in the scope) ahead of the device clock.
+        const shortestPeriod = Math.min(
+          ...Object.values(stored.scope.periodLimits ?? {}).flatMap((limit) =>
+            limit ? [limit.seconds] : [],
+          ),
+        );
+        const nowSec = Math.floor(Date.now() / 1000);
+        if (chainTime.timestamp > nowSec + shortestPeriod) {
+          throw createSessionKeyError(
+            "session_key_invalid_input",
+            "chainTime.timestamp is more than one period ahead of the device clock",
+          );
+        }
+      }
       // The execution is what the scope governs; gas is the key's own spend
       // on the transaction it sends, so it comes from the outer transaction.
-      return this.signStoredSessionKey(stored, digest, {
-        to: execution.target,
-        value: `0x${execution.value.toString(16)}`,
-        data: execution.callData,
-        chainId,
-        ...(outerTx.gas !== undefined ? { gas: outerTx.gas } : {}),
-      });
+      return this.signStoredSessionKey(
+        stored,
+        digest,
+        {
+          to: execution.target,
+          value: `0x${execution.value.toString(16)}`,
+          data: execution.callData,
+          chainId,
+          ...(outerTx.gas !== undefined ? { gas: outerTx.gas } : {}),
+        },
+        hasPeriods && chainTime
+          ? {
+              at: chainTime.timestamp,
+              marginSeconds: chainTime.inclusionMarginSeconds,
+            }
+          : undefined,
+      );
     });
   }
 
@@ -1165,12 +1211,22 @@ export class SessionKeyManager {
    * outer-transaction facts are both derived from `tx`, so the caller cannot
    * pass an outer transaction other than the one hashed. `outerTx.gas`, when
    * given, must equal `tx.gas`.
+   *
+   * `chainTime` is required when the scope has `periodLimits`: the on-chain
+   * period enforcers pick the window from `block.timestamp`, so the device
+   * must count the spend against the same window. `timestamp` is the latest
+   * block's timestamp (seconds); signing is refused when
+   * `timestamp + inclusionMarginSeconds` reaches the next window, so a
+   * redemption included within the margin is charged by the chain to the
+   * window the device records. A `timestamp` more than the shortest period
+   * ahead of the device clock is refused.
    */
   async signTransactionDelegationRedemption(
     sessionId: string,
     tx: TransactionRequest,
     outerTx: { gas?: string },
     execution: FrameworkExecution,
+    chainTime?: { timestamp: number; inclusionMarginSeconds: number },
   ): Promise<`0x${string}`> {
     const { digest, facts } = deriveSessionTransaction(
       tx,
@@ -1182,7 +1238,13 @@ export class SessionKeyManager {
         "outerTx.gas must equal the gas of the transaction being signed",
       );
     }
-    return this.signRedemptionWithDigest(sessionId, digest, facts, execution);
+    return this.signRedemptionWithDigest(
+      sessionId,
+      digest,
+      facts,
+      execution,
+      chainTime,
+    );
   }
 
   /**
@@ -1252,8 +1314,15 @@ export class SessionKeyManager {
     stored: StoredSessionKey,
     messageHash: `0x${string}`,
     tx: SessionKeyTransaction,
+    periodClock?: PeriodClock,
   ): Promise<`0x${string}`> {
     this.assertMessageHash(messageHash);
+    // One clock reading for both the check and the record, so a boundary
+    // between them cannot check one window and charge another.
+    const clock: PeriodClock = periodClock ?? {
+      at: Math.floor(Date.now() / 1000),
+      marginSeconds: 0,
+    };
     this.validateSessionStatus(stored);
     if (
       !this.config.unsafeAllowUnauthorizedSigning &&
@@ -1273,6 +1342,7 @@ export class SessionKeyManager {
       stored.accumulatedGas,
       stored.accumulatedTokenSpends,
       stored.periodUsage,
+      clock,
     );
     if (!check.valid) {
       throw createSessionKeyError(
@@ -1317,6 +1387,7 @@ export class SessionKeyManager {
       tx,
       stored.periodUsage,
       tokenSpend,
+      clock,
     );
     await this.storage.incrementUsageUnlocked(
       stored.id,
@@ -1678,6 +1749,10 @@ export class SessionKeyManager {
     accumulatedGas = 0n,
     accumulatedTokenSpends?: StoredSessionKey["accumulatedTokenSpends"],
     periodUsage?: StoredSessionKey["periodUsage"],
+    clock: PeriodClock = {
+      at: Math.floor(Date.now() / 1000),
+      marginSeconds: 0,
+    },
   ): ScopeCheckResult {
     const result: ScopeCheckResult = { valid: true };
     let txValue = 0n;
@@ -1824,6 +1899,7 @@ export class SessionKeyManager {
         tx,
         periodUsage,
         tokenSpendResult.spend,
+        clock,
       );
     } catch (error) {
       return {
@@ -1958,7 +2034,8 @@ export class SessionKeyManager {
     scope: SessionKeyScope,
     tx: SessionKeyTransaction,
     usage: StoredSessionKey["periodUsage"],
-    tokenSpend?: { tokenAddress: `0x${string}`; amount: bigint },
+    tokenSpend: { tokenAddress: `0x${string}`; amount: bigint } | undefined,
+    clock: PeriodClock,
   ): { asset: string; periodIndex: number; amount: bigint } | null {
     const asset = tokenSpend
       ? Object.keys(scope.periodLimits ?? {}).find(
@@ -1973,7 +2050,7 @@ export class SessionKeyManager {
         asset as keyof NonNullable<SessionKeyScope["periodLimits"]>
       ];
     if (!period) return null;
-    const at = Math.floor(Date.now() / 1000);
+    const { at, marginSeconds } = clock;
     if (at < period.start) {
       throw createSessionKeyError(
         "session_key_scope_exceeded",
@@ -1981,6 +2058,17 @@ export class SessionKeyManager {
       );
     }
     const periodIndex = Math.floor((at - period.start) / period.seconds);
+    if (
+      marginSeconds > 0 &&
+      at + marginSeconds >= period.start + (periodIndex + 1) * period.seconds
+    ) {
+      // The chain could include this in the next window while the device
+      // records it in this one; wait for the boundary instead.
+      throw createSessionKeyError(
+        "session_key_scope_exceeded",
+        "The redemption could land in the next period; retry after the boundary",
+      );
+    }
     if (usage !== undefined) {
       if (typeof usage !== "object" || usage === null || Array.isArray(usage)) {
         throw createSessionKeyError(

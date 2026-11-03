@@ -7,6 +7,12 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ## [Unreleased]
 
+### Breaking
+
+- **Period spend is passed as `periodUsage: { periodIndex, spent }`** (`@naculus/connect-core`). `periodSpentSoFar` is removed. The evaluator checks `periodIndex` against the period `at` falls in: an earlier record counts as zero, a later or missing record is refused (`invalid-authorization` when malformed).
+- **`signTransactionDelegationRedemption` takes `chainTime {timestamp, inclusionMarginSeconds}`** when the scope has `periodLimits` (`@naculus/connect-core`). Signing is refused in the last `inclusionMarginSeconds` of a period, so a transaction that lands after the period ends is not charged to the wrong period. A `timestamp` more than the shortest period ahead of the device clock is refused.
+- **`sendWithSession` reads the chain timestamp for eip7702 redemptions** (`@naculus/wallet-engine`). It calls `eth_getBlockByNumber("latest")` before signing and passes `chainTime { timestamp, inclusionMarginSeconds: 60 }`, so period-limited payments no longer fail. Every eip7702 redemption now needs that block read, including ones without period limits; if the RPC returns no usable timestamp, the send is refused with `invalid_input`.
+
 ## 0.15.0 — 2026-10-26
 
 Breaking release for session keys. All connect-lib packages release in lockstep at 0.15.0. Unpublished 0.14.2 changes are folded into this release. Migration guide: [MIGRATION-0.15.md](docs/MIGRATION-0.15.md).

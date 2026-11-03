@@ -2661,7 +2661,10 @@ export class SessionKeyManager {
     }, execution: FrameworkExecution): Promise<`0x${string}`>;
     signTransactionDelegationRedemption(sessionId: string, tx: TransactionRequest, outerTx: {
         gas?: string;
-    }, execution: FrameworkExecution): Promise<`0x${string}`>;
+    }, execution: FrameworkExecution, chainTime?: {
+        timestamp: number;
+        inclusionMarginSeconds: number;
+    }): Promise<`0x${string}`>;
     signTransactionWithSessionKey(sessionId: string, tx: TransactionRequest): Promise<`0x${string}`>;
     signTransactionWithVerifiedOffchainAuthorization(sessionId: string, buildExpectedMessage: (policy: SessionKeyInfo) => string, verify: OffchainAuthorizationVerifier, tx: TransactionRequest): Promise<`0x${string}`>;
     signTypedDataWithSessionKey(sessionId: string, request: SessionKeyTypedDataRequest, rail: "x402-exact" | "mpp-charge"): Promise<`0x${string}`>;
@@ -3288,6 +3291,14 @@ export interface SolanaTransferSettlementExpected {
 }
 
 // @public (undocumented)
+export interface SpendPeriodUsage {
+    // (undocumented)
+    periodIndex: number;
+    // (undocumented)
+    spent: bigint;
+}
+
+// @public (undocumented)
 export type SpendRefusal = "expired" | "not-yet-valid" | "no-matching-grant" | "recipient-not-allowed" | "over-per-payment" | "over-total" | "over-count" | "period-limit-exceeded" | "rail-not-allowed" | "invalid-authorization";
 
 // @public (undocumented)
@@ -3300,8 +3311,7 @@ export interface SpendRequest {
     at: number;
     // (undocumented)
     countSoFar: number;
-    // (undocumented)
-    periodSpentSoFar?: bigint;
+    periodUsage?: SpendPeriodUsage;
     // (undocumented)
     rail: Rail;
     // (undocumented)
@@ -4026,7 +4036,7 @@ export const XRPL_TESTNET = "xrpl:1";
 
 // Warnings were encountered during analysis:
 //
-// packages/core/dist/index.d.ts:3110:5 - (ae-forgotten-export) The symbol "createNamespace" needs to be exported by the entry point index.d.ts
+// packages/core/dist/index.d.ts:3154:5 - (ae-forgotten-export) The symbol "createNamespace" needs to be exported by the entry point index.d.ts
 
 // (No @packageDocumentation comment for this package)
 

@@ -1,6 +1,6 @@
 import { secp256k1 } from "@noble/curves/secp256k1.js";
 import { bytesToHex, hexToBytes } from "@noble/hashes/utils.js";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { TransactionRequest } from "../../signing";
 import { MemoryStorageAdapter } from "../../storage";
 import {
@@ -329,6 +329,137 @@ describe("eip7702 session keys: redemption", () => {
       ),
     ).rejects.toMatchObject({
       details: expect.stringMatching(/only delegation redemptions/),
+    });
+  });
+});
+
+describe("eip7702 session keys: period windows follow chain time", () => {
+  const START = 1_000_000;
+  const period = { amount: 500n, seconds: 100, start: START };
+
+  async function periodKey() {
+    const manager = new SessionKeyManager(
+      { pbkdf2Iterations: 1_000, unsafeAllowWeakKdf: true, encryptionKey: "k" },
+      new MemoryStorageAdapter(),
+    );
+    const info = await manager.createSessionKey(
+      { ...scope, periodLimits: { [USDC]: period } },
+      OWNER,
+    );
+    const delegation = await manager.prepareDelegation(info.id, 8453, 1n);
+    await manager.attachDelegation(
+      info.id,
+      delegation,
+      sign(delegationSigningDigest(delegation)),
+    );
+    return { manager, info };
+  }
+
+  async function redeem(
+    manager: SessionKeyManager,
+    id: string,
+    amount: bigint,
+    chainTime?: { timestamp: number; inclusionMarginSeconds: number },
+  ) {
+    const execution = transfer(PAYEE, amount);
+    const call = await manager.buildDelegationRedemption(id, execution);
+    return manager.signTransactionDelegationRedemption(
+      id,
+      redemptionTx(call),
+      {},
+      execution,
+      chainTime,
+    );
+  }
+
+  it("refuses a period-limited redemption without chain time", async () => {
+    const { manager, info } = await periodKey();
+    await expect(redeem(manager, info.id, 1n)).rejects.toMatchObject({
+      code: "session_key_invalid_input",
+    });
+  });
+
+  it("counts the window from chain time, not the device clock", async () => {
+    const { manager, info } = await periodKey();
+    // The device clock is far past START; chain time is in window 0.
+    await expect(
+      redeem(manager, info.id, 500n, {
+        timestamp: START + 10,
+        inclusionMarginSeconds: 12,
+      }),
+    ).resolves.toMatch(/^0x/);
+    await expect(
+      redeem(manager, info.id, 1n, {
+        timestamp: START + 20,
+        inclusionMarginSeconds: 12,
+      }),
+    ).rejects.toMatchObject({ code: "session_key_scope_exceeded" });
+  });
+
+  it("refuses a redemption that could land in the next window", async () => {
+    const { manager, info } = await periodKey();
+    await expect(
+      redeem(manager, info.id, 1n, {
+        timestamp: START + 90,
+        inclusionMarginSeconds: 12,
+      }),
+    ).rejects.toMatchObject({
+      code: "session_key_scope_exceeded",
+      details: expect.stringMatching(/next period/),
+    });
+    // Past the boundary the new window opens with nothing spent.
+    await expect(
+      redeem(manager, info.id, 500n, {
+        timestamp: START + 100,
+        inclusionMarginSeconds: 12,
+      }),
+    ).resolves.toMatch(/^0x/);
+  });
+
+  describe("chain time ahead of the device clock", () => {
+    afterEach(() => {
+      vi.restoreAllMocks();
+    });
+
+    function freezeClock(): number {
+      const nowSec = Math.floor(Date.now() / 1000);
+      vi.spyOn(Date, "now").mockReturnValue(nowSec * 1000);
+      return nowSec;
+    }
+
+    it("refuses a timestamp more than one period ahead and records nothing", async () => {
+      const { manager, info } = await periodKey();
+      const nowSec = freezeClock();
+      await expect(
+        redeem(manager, info.id, 500n, {
+          timestamp: nowSec + period.seconds + 1,
+          inclusionMarginSeconds: 12,
+        }),
+      ).rejects.toMatchObject({
+        code: "session_key_invalid_input",
+        details: expect.stringMatching(/ahead of the device clock/),
+      });
+      // Nothing was recorded: the full limit is still available at real time,
+      // and no future period index blocks signing as malformed.
+      await expect(
+        redeem(manager, info.id, 500n, {
+          timestamp: nowSec - ((nowSec - START) % period.seconds),
+          inclusionMarginSeconds: 12,
+        }),
+      ).resolves.toMatch(/^0x/);
+    });
+
+    it("accepts a timestamp inside the allowed skew", async () => {
+      const { manager, info } = await periodKey();
+      const nowSec = freezeClock();
+      // Exactly one period ahead, at the start of a window.
+      const ahead = nowSec + period.seconds;
+      await expect(
+        redeem(manager, info.id, 1n, {
+          timestamp: ahead - ((ahead - START) % period.seconds),
+          inclusionMarginSeconds: 12,
+        }),
+      ).resolves.toMatch(/^0x/);
     });
   });
 });

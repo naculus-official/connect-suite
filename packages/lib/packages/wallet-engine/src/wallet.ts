@@ -408,6 +408,13 @@ export interface WalletState {
   isConnected: boolean;
 }
 
+/**
+ * Seconds a period-limited eip7702 redemption is given to be included. Signing
+ * is refused when the latest block's timestamp plus this margin reaches the
+ * next period, so the chain charges the spend to the period the device records.
+ */
+const PERIOD_INCLUSION_MARGIN_SECONDS = 60;
+
 const DEFAULTS: Required<
   Pick<PocketConfig, "storageKey" | "derivationPath" | "autoSave" | "chainId">
 > = {
@@ -2661,14 +2668,35 @@ export class PocketWallet {
     // this exact transaction and checks the scope against the same facts.
     const builtTx = buildTransaction(sendTx, resolvedFees);
     builtTx.chainId = configuredChainId;
-    const signature = execution
-      ? await mgr.signTransactionDelegationRedemption(
-          sessionId,
-          builtTx,
-          { gas: builtTx.gas },
-          execution,
-        )
-      : await mgr.signTransactionWithSessionKey(sessionId, builtTx);
+    let signature: `0x${string}`;
+    if (execution) {
+      // The on-chain period enforcers pick the window from block.timestamp,
+      // so the period is counted at the chain's time, not the device clock.
+      const block = (await this.rpcCall("eth_getBlockByNumber", [
+        "latest",
+        false,
+      ])) as { timestamp?: unknown } | null;
+      const timestamp =
+        typeof block?.timestamp === "string" &&
+        /^0x[0-9a-fA-F]+$/.test(block.timestamp)
+          ? Number(block.timestamp)
+          : Number.NaN;
+      if (!Number.isSafeInteger(timestamp) || timestamp <= 0) {
+        throw new WalletError(
+          "invalid_input",
+          "The latest block has no usable timestamp.",
+        );
+      }
+      signature = await mgr.signTransactionDelegationRedemption(
+        sessionId,
+        builtTx,
+        { gas: builtTx.gas },
+        execution,
+        { timestamp, inclusionMarginSeconds: PERIOD_INCLUSION_MARGIN_SECONDS },
+      );
+    } else {
+      signature = await mgr.signTransactionWithSessionKey(sessionId, builtTx);
+    }
     const v = Number.parseInt(signature.slice(130, 132), 16);
     const rawTx = serializeSignedTransaction(builtTx, {
       r: `0x${signature.slice(2, 66)}`,

@@ -100,7 +100,18 @@ export interface SpendRequest {
   at: number;
   spentSoFar: bigint;
   countSoFar: number;
-  periodSpentSoFar?: bigint;
+  /**
+   * The caller's record for the grant's period: the window it belongs to and
+   * the amount spent in it. The evaluator derives the window from `at`; a
+   * record from an earlier window counts as nothing spent, one from a later
+   * window is refused.
+   */
+  periodUsage?: SpendPeriodUsage;
+}
+
+export interface SpendPeriodUsage {
+  periodIndex: number;
+  spent: bigint;
 }
 
 export type SpendRefusal =
@@ -444,15 +455,19 @@ export function evaluateSpend(
         "spentSoFar",
         "countSoFar",
       ],
-      ["periodSpentSoFar"],
+      ["periodUsage"],
     ) ||
     typeof request.amount !== "bigint" ||
     request.amount <= 0n ||
     typeof request.spentSoFar !== "bigint" ||
     request.spentSoFar < 0n ||
-    (request.periodSpentSoFar !== undefined &&
-      (typeof request.periodSpentSoFar !== "bigint" ||
-        request.periodSpentSoFar < 0n)) ||
+    (request.periodUsage !== undefined &&
+      (!isRecord(request.periodUsage) ||
+        !exactKeys(request.periodUsage, ["periodIndex", "spent"]) ||
+        !Number.isSafeInteger(request.periodUsage.periodIndex) ||
+        (request.periodUsage.periodIndex as number) < 0 ||
+        typeof request.periodUsage.spent !== "bigint" ||
+        request.periodUsage.spent < 0n)) ||
     !Number.isSafeInteger(request.at) ||
     !Number.isSafeInteger(request.countSoFar) ||
     request.countSoFar < 0 ||
@@ -505,10 +520,18 @@ export function evaluateSpend(
     const periodIndex = Math.floor(
       (request.at - match.grant.period.start) / match.grant.period.seconds,
     );
-    if (periodIndex < 0 || request.periodSpentSoFar === undefined) {
+    const usage = request.periodUsage;
+    // Missing usage, or a record from a window after `at`, is refused rather
+    // than guessed; a record from an earlier window has expired.
+    if (
+      periodIndex < 0 ||
+      usage === undefined ||
+      usage.periodIndex > periodIndex
+    ) {
       return { allow: false, reason: "period-limit-exceeded" };
     }
-    if (request.periodSpentSoFar + request.amount > match.grant.period.amount) {
+    const spent = usage.periodIndex === periodIndex ? usage.spent : 0n;
+    if (spent + request.amount > match.grant.period.amount) {
       return { allow: false, reason: "period-limit-exceeded" };
     }
   }

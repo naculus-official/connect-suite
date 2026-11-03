@@ -271,14 +271,16 @@ describe("evaluateSpend", () => {
   });
 
   it.each([
-    ["at start", NOW, 99n, true],
-    ["last second", NOW + 9, 99n, true],
-    ["next period", NOW + 10, 0n, true],
-    ["before start", NOW - 1, 0n, false],
-    ["over period", NOW, 100n, false],
+    ["at start", NOW, 0, 99n, true],
+    ["last second", NOW + 9, 0, 99n, true],
+    ["next period", NOW + 10, 1, 0n, true],
+    ["before start", NOW - 1, 0, 0n, false],
+    ["over period", NOW, 0, 100n, false],
+    ["stale record from an earlier period", NOW + 10, 0, 100n, true],
+    ["record from a later period", NOW + 9, 1, 0n, false],
   ] as const)(
     "enforces a fixed window %s",
-    (_name, at, periodSpentSoFar, allow) => {
+    (_name, at, periodIndex, spent, allow) => {
       const authorization = evmAuthorization({
         notBefore: undefined,
         grants: [
@@ -297,7 +299,7 @@ describe("evaluateSpend", () => {
           at,
           spentSoFar: 0n,
           countSoFar: 0,
-          periodSpentSoFar,
+          periodUsage: { periodIndex, spent },
         }).allow,
       ).toBe(allow);
     },
@@ -324,6 +326,36 @@ describe("evaluateSpend", () => {
         countSoFar: 0,
       }),
     ).toEqual({ allow: false, reason: "period-limit-exceeded" });
+  });
+
+  it.each([
+    ["a bare bigint", 0n],
+    ["a negative index", { periodIndex: -1, spent: 0n }],
+    ["a non-integer index", { periodIndex: 0.5, spent: 0n }],
+    ["a number spent", { periodIndex: 0, spent: 0 }],
+    ["an extra key", { periodIndex: 0, spent: 0n, extra: 1 }],
+  ])("refuses period usage given as %s", (_name, periodUsage) => {
+    const authorization = evmAuthorization({
+      notBefore: undefined,
+      grants: [
+        {
+          ...evmAuthorization().grants[0],
+          period: { amount: 100n, seconds: 10, start: NOW },
+        },
+      ],
+    });
+    expect(
+      evaluateSpend(authorization, {
+        asset: `eip155:1/erc20:${TOKEN}`,
+        recipient: EVM_PAYEE,
+        amount: 1n,
+        rail: "transfer",
+        at: NOW,
+        spentSoFar: 0n,
+        countSoFar: 0,
+        periodUsage,
+      } as unknown as Parameters<typeof evaluateSpend>[1]),
+    ).toEqual({ allow: false, reason: "invalid-authorization" });
   });
 });
 
@@ -1487,7 +1519,10 @@ describe("differential enforcer checks", () => {
             at,
             spentSoFar: 0n,
             countSoFar: 0,
-            periodSpentSoFar: periodSpent,
+            periodUsage: {
+              periodIndex: at < NOW ? 0 : Math.floor((at - NOW) / 10),
+              spent: periodSpent,
+            },
           };
           vi.setSystemTime(new Date(at * 1_000));
           let actual = true;

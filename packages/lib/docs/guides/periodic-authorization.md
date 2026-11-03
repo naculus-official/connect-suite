@@ -62,8 +62,9 @@ The semantics are exactly those of MetaMask Delegation Framework v1.3.0's
 ### Previewing a payment
 
 `evaluateSpend` gives the same verdict as the enforcer, for consent screens and
-previews. With a `period`, pass `periodSpentSoFar`, the amount already spent in
-the period that `at` falls in; leaving it out refuses
+previews. With a `period`, pass `periodUsage: { periodIndex, spent }`: `spent` is the
+amount already spent in period `periodIndex` (the period `at` falls in).
+Leaving it out refuses
 (`period-limit-exceeded`), fail-closed.
 
 ```ts
@@ -77,7 +78,7 @@ the period that `at` falls in; leaving it out refuses
     at: Math.floor(Date.now() / 1000),
     spentSoFar: 0n,
     countSoFar: 0,
-    periodSpentSoFar: 0n,
+    periodUsage: { periodIndex: 0, spent: 0n },
   }); // { allow: true, grant: 0 }
 ```
 
