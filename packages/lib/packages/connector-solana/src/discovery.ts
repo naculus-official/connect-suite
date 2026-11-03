@@ -193,14 +193,20 @@ export function createProviderFromWalletStandard(
       return requireOutput(output, "signedTransaction", isNonEmptyBytes);
     },
     async signAllTransactions(txs) {
-      if (!signAllTxFeature)
-        throw new Error("Wallet does not support solana:signAllTransactions");
+      if (!signAllTxFeature && !signTxFeature)
+        throw new Error(
+          "Wallet does not support solana:signAllTransactions or solana:signTransaction",
+        );
       // Resolved first so the disconnect and account-change guards apply,
       // and each input names the account as the single-transaction methods do.
       const account = currentAccount();
-      const output = await signAllTxFeature.signAllTransactions(
-        ...txs.map((transaction) => ({ account, transaction })),
-      );
+      const inputs = txs.map((transaction) => ({ account, transaction }));
+      // `solana:signAllTransactions` is not a Wallet Standard feature, so
+      // compliant wallets do not register it. `solana:signTransaction` is
+      // variadic and is the standard way to sign a batch in one prompt.
+      const output = signAllTxFeature
+        ? await signAllTxFeature.signAllTransactions(...inputs)
+        : await signTxFeature.signTransaction(...inputs);
       // One output per input: a short array would silently drop a
       // transaction the caller believes was signed.
       if (!Array.isArray(output) || output.length !== txs.length) {

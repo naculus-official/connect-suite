@@ -662,12 +662,16 @@ class SolanaConnectorImpl implements UniversalConnector {
    * discover it at the approval prompt. `roles.payer === null` means the
    * opposite — it signs, but something else has to broadcast.
    *
-   * Returns null when there is no live session, because the roles belong to a
-   * connected account, not to the connector.
+   * Returns null when there is no live session, or when `session` is not the
+   * live one, because the roles belong to a connected account, not to the
+   * connector.
    */
   getRoles(session: UniversalWalletSession): SolanaRoles | null {
     const active = this.activeSession;
-    if (!active) return null;
+    // A session from an earlier connect must not obtain a signer bound to the
+    // current one. Null rather than a throw: readSolanaRoles in appkit core
+    // maps null to "no_session" and does not catch.
+    if (!active || active.session.id !== session?.id) return null;
     // The session argument is the caller's view; the address and chain are
     // read from the live session so an in-wallet account switch is reflected.
     const chain =

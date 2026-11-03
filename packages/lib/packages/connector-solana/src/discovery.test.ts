@@ -249,6 +249,42 @@ describe("createProviderFromWalletStandard", () => {
       ).rejects.toThrow(/no connected account/);
       expect(signAllTransactions).not.toHaveBeenCalled();
     });
+
+    /**
+     * `solana:signAllTransactions` is not a Wallet Standard feature (absent
+     * from @solana/wallet-standard-features 1.5.0), so Phantom, Solflare and
+     * Backpack never register it. The batch goes through the variadic
+     * `solana:signTransaction` instead, in one call.
+     */
+    it("batches signAllTransactions through solana:signTransaction when that is all the wallet registers", async () => {
+      const signed = [new Uint8Array([8]), new Uint8Array([9])];
+      const signTransaction = vi.fn(async () =>
+        signed.map((signedTransaction) => ({ signedTransaction })),
+      );
+      const provider = await connected({
+        "solana:signTransaction": { signTransaction },
+      });
+      const txs = [new Uint8Array([1]), new Uint8Array([2])];
+      const res = await provider.signAllTransactions(txs);
+      expect(signTransaction).toHaveBeenCalledTimes(1);
+      expect(signTransaction.mock.calls[0]).toEqual([
+        { account: ACCOUNT, transaction: txs[0] },
+        { account: ACCOUNT, transaction: txs[1] },
+      ]);
+      expect(res).toEqual(signed);
+    });
+
+    it("refuses signAllTransactions when neither batch feature is registered", async () => {
+      const signMessage = vi.fn();
+      const provider = await connected({
+        "solana:signMessage": { signMessage },
+        "solana:signTransaction": undefined,
+      });
+      await expect(
+        provider.signAllTransactions([new Uint8Array([1])]),
+      ).rejects.toThrow(/solana:signAllTransactions or solana:signTransaction/);
+      expect(signMessage).not.toHaveBeenCalled();
+    });
   });
   /**
    * Wallet output is untrusted. An empty array or a wrongly sized field used
@@ -338,6 +374,30 @@ describe("createProviderFromWalletStandard", () => {
         ]),
       ).rejects.toThrow(/malformed output/);
     });
+
+    const threeOutputs = [
+      { signedTransaction: new Uint8Array([7]) },
+      { signedTransaction: new Uint8Array([8]) },
+      { signedTransaction: new Uint8Array([9]) },
+    ];
+    it.each([
+      ["solana:signAllTransactions", "signAllTransactions"],
+      ["solana:signTransaction", "signTransaction"],
+    ])(
+      "signAllTransactions through %s refuses 3 outputs for 2 inputs",
+      async (feature, method) => {
+        const provider = await connected({
+          "solana:signTransaction": undefined,
+          [feature]: { [method]: vi.fn(async () => threeOutputs) },
+        });
+        await expect(
+          provider.signAllTransactions([
+            new Uint8Array([1]),
+            new Uint8Array([2]),
+          ]),
+        ).rejects.toThrow(/length mismatch/);
+      },
+    );
   });
 
   /**

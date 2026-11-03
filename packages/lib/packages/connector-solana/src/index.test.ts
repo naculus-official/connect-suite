@@ -1215,6 +1215,34 @@ describe("SolanaConnector — Wallet Standard session sync", () => {
     expect(signAndSendTransaction).not.toHaveBeenCalled();
   });
 
+  it("getRoles refuses a session from before a disconnect and reconnect", async () => {
+    const { wallet, signAndSendTransaction } = standardWallet();
+    connector.registerWallet(wallet);
+    const first = await connector.connect("wallet-standard-std");
+    await connector.disconnect(first);
+    const second = await connector.connect("wallet-standard-std");
+    expect(second.id).not.toBe(first.id);
+
+    // S1 must not obtain a live signer bound to S2.
+    expect(connector.getRoles(first)).toBeNull();
+    expect(signAndSendTransaction).not.toHaveBeenCalled();
+  });
+
+  it("getRoles still serves the current session after a reconnect", async () => {
+    const { wallet, signAndSendTransaction } = standardWallet();
+    connector.registerWallet(wallet);
+    const first = await connector.connect("wallet-standard-std");
+    await connector.disconnect(first);
+    const second = await connector.connect("wallet-standard-std");
+
+    const roles = connector.getRoles(second);
+    expect(roles?.payer?.address).toBe(FIRST.address);
+    await expect(
+      roles?.payer?.signAndSendTransaction(new Uint8Array([1])),
+    ).resolves.toBeDefined();
+    expect(signAndSendTransaction).toHaveBeenCalledTimes(1);
+  });
+
   it("signing methods refuse a session whose id is not the active one", async () => {
     const { wallet, signMessage, signAndSendTransaction } = standardWallet();
     const signTransaction = vi.fn(async () => [
