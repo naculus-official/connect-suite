@@ -192,7 +192,12 @@ class SolanaConnectorImpl implements UniversalConnector {
 
     let provider: SolanaProvider;
     try {
-      provider = createProviderFromWalletStandard(wallet);
+      provider = createProviderFromWalletStandard(
+        wallet,
+        () =>
+          this.activeSession?.session.namespaces.solana?.chains[0] ??
+          this.defaultChain,
+      );
     } catch {
       // A Wallet Standard registration can be emitted before all required
       // Solana features are present. Ignore unsupported registrations rather

@@ -1,7 +1,22 @@
-import type {
-  SolanaProvider,
-  WalletStandardWallet,
-} from "./types";
+import {
+  SOLANA_DEVNET,
+  SOLANA_MAINNET,
+  SOLANA_TESTNET,
+} from "@naculus/connect-core";
+import type { SolanaProvider, WalletStandardWallet } from "./types";
+
+/**
+ * CAIP-2 chain ID → Wallet Standard chain identifier.
+ *
+ * `solana:signAndSendTransaction` requires a `chain` in Wallet Standard form
+ * (`@solana/wallet-standard-chains`), not the CAIP-2 genesis-hash form the
+ * session holds.
+ */
+const WALLET_STANDARD_CHAINS: Record<string, `${string}:${string}`> = {
+  [SOLANA_MAINNET]: "solana:mainnet",
+  [SOLANA_DEVNET]: "solana:devnet",
+  [SOLANA_TESTNET]: "solana:testnet",
+};
 
 /**
  * Known wallet metadata for Solana wallets.
@@ -27,6 +42,8 @@ export const SOLANA_WALLET_META: Record<
  */
 export function createProviderFromWalletStandard(
   wallet: WalletStandardWallet,
+  /** The session's CAIP-2 chain, read at call time for sign-and-send. */
+  getChain?: () => string | undefined,
 ): SolanaProvider {
   const f = wallet.features as Record<string, any>;
   const requireFeature = <T>(name: string): T => {
@@ -68,6 +85,26 @@ export function createProviderFromWalletStandard(
   const eventsFeature = f["standard:events"] as
     | { on?: (event: string, handler: (...args: unknown[]) => void) => unknown }
     | undefined;
+  /** The account `standard:connect` returned; Wallet Standard inputs name it. */
+  let connectedAccount: WalletStandardAccount | undefined;
+  /**
+   * The wallet's own account object for the connected address.
+   *
+   * Wallet Standard `solana:*` methods take `(...inputs)`, each input naming
+   * the `account`. Wallets may compare it by identity against their
+   * `accounts`, so the wallet's object is preferred over the copy from connect.
+   */
+  const currentAccount = (): WalletStandardAccount => {
+    const account =
+      (connectedAccount &&
+        wallet.accounts?.find(
+          (a) => a.address === connectedAccount?.address,
+        )) ??
+      connectedAccount ??
+      wallet.accounts?.[0];
+    if (!account) throw new Error("Wallet Standard wallet has no account");
+    return account;
+  };
   /** Unsubscribe callbacks returned by `standard:events`, keyed by handler. */
   const unsubscribes = new Map<(...args: unknown[]) => void, (() => void)[]>();
 
@@ -84,6 +121,7 @@ export function createProviderFromWalletStandard(
         );
       }
       const account = candidate;
+      connectedAccount = account;
       return {
         publicKey: {
           toString() {
@@ -101,14 +139,20 @@ export function createProviderFromWalletStandard(
     async signMessage(message) {
       if (!signMessageFeature)
         throw new Error("Wallet does not support solana:signMessage");
-      const result = await signMessageFeature.signMessage(message);
+      const [result] = await signMessageFeature.signMessage({
+        account: currentAccount(),
+        message,
+      });
       return { signature: result.signature };
     },
     async signTransaction(tx) {
       if (!signTxFeature)
         throw new Error("Wallet does not support solana:signTransaction");
-      const result = await signTxFeature.signTransaction(tx);
-      return result.signedTransaction ?? result;
+      const [result] = await signTxFeature.signTransaction({
+        account: currentAccount(),
+        transaction: tx,
+      });
+      return result.signedTransaction;
     },
     async signAllTransactions(txs) {
       if (!signAllTxFeature)
@@ -121,8 +165,19 @@ export function createProviderFromWalletStandard(
         throw new Error(
           "Wallet does not support solana:signAndSendTransaction",
         );
-      const result = await signSendTxFeature.signAndSendTransaction(tx);
-      return { signature: result.signature };
+      const caip2 = getChain?.();
+      const chain = caip2 ? WALLET_STANDARD_CHAINS[caip2] : undefined;
+      if (!chain)
+        throw new Error(
+          "No Wallet Standard chain for solana:signAndSendTransaction",
+        );
+      const [result] = await signSendTxFeature.signAndSendTransaction({
+        account: currentAccount(),
+        transaction: tx,
+        chain,
+      });
+      // Wallet Standard returns raw signature bytes; callers expect base58.
+      return { signature: encodeBase58(result.signature) };
     },
     on(event, handler) {
       // `standard:events` returns an unsubscribe function. Discarding it left
@@ -152,9 +207,39 @@ export function createProviderFromWalletStandard(
   };
 }
 
+type WalletStandardAccount = WalletStandardWallet["accounts"][number];
+
+const BASE58_ALPHABET =
+  "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
+
+/** Bitcoin-alphabet base58, as Solana uses for signatures. */
+function encodeBase58(bytes: Uint8Array): string {
+  const digits: number[] = [];
+  for (const byte of bytes) {
+    let carry = byte;
+    for (let i = 0; i < digits.length; i++) {
+      carry += digits[i] << 8;
+      digits[i] = carry % 58;
+      carry = (carry / 58) | 0;
+    }
+    while (carry > 0) {
+      digits.push(carry % 58);
+      carry = (carry / 58) | 0;
+    }
+  }
+  let out = "";
+  for (const byte of bytes) {
+    if (byte !== 0) break;
+    out += "1";
+  }
+  for (let i = digits.length - 1; i >= 0; i--)
+    out += BASE58_ALPHABET[digits[i]];
+  return out;
+}
+
 function isWalletStandardAccount(
   value: unknown,
-): value is { address: string; publicKey: Uint8Array } {
+): value is WalletStandardAccount {
   return (
     !!value &&
     typeof value === "object" &&
