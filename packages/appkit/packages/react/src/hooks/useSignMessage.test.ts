@@ -17,6 +17,7 @@ vi.mock("../client", () => ({
 }));
 
 import { useSignMessage } from "./useSignMessage";
+import { getUserFriendlyError } from "../utils/errorMessages";
 
 function createMockSession() {
   return {
@@ -147,5 +148,67 @@ describe("useSignMessage", () => {
 
     expect(result.current.error).not.toBeNull();
     expect(result.current.error?.message).toBe("User rejected");
+  });
+
+  describe("EIP-1193 wallet errors", () => {
+    async function failWith(cause: unknown) {
+      mockSignMessage.mockRejectedValue(cause);
+      mockUseWeb3.mockReturnValue({
+        session: createMockSession(),
+        chainId: "eip155:1",
+      });
+      mockGetClient.mockReturnValue({ signMessage: mockSignMessage });
+      const { result } = renderHook(() => useSignMessage());
+      let thrown: unknown;
+      await act(async () => {
+        try {
+          await result.current.signMessage("hello");
+        } catch (err) {
+          thrown = err;
+        }
+      });
+      return { error: result.current.error, thrown };
+    }
+
+    it("keeps code 4100 from a plain provider error object", async () => {
+      const cause = {
+        code: 4100,
+        message:
+          "The requested account and/or method has not been authorized by the user.",
+      };
+      const { error, thrown } = await failWith(cause);
+      expect(error?.code).toBe(4100);
+      expect(error?.message).toBe(cause.message);
+      expect(error?.cause).toBe(cause);
+      expect(thrown).toBe(error);
+    });
+
+    it("still recognizes a 4001 as a user rejection", async () => {
+      const { error } = await failWith({
+        code: 4001,
+        message: "User rejected the request.",
+      });
+      expect(error?.code).toBe(4001);
+      expect(getUserFriendlyError(error).code).toBe("user_rejected");
+
+      // An Error carrying 4001 is passed through as the same object.
+      const rejection = Object.assign(new Error("User rejected the request."), {
+        code: 4001,
+      });
+      const second = await failWith(rejection);
+      expect(second.error).toBe(rejection);
+      expect(getUserFriendlyError(second.error).code).toBe("user_rejected");
+    });
+
+    it("keeps a generic Error unchanged and a bare failure generic", async () => {
+      const generic = new Error("boom");
+      const first = await failWith(generic);
+      expect(first.error).toBe(generic);
+      expect(first.error?.code).toBeUndefined();
+
+      const second = await failWith({});
+      expect(second.error?.message).toBe("Signing failed");
+      expect(second.error?.code).toBeUndefined();
+    });
   });
 });

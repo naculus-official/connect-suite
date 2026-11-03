@@ -49,4 +49,57 @@ describe("useSignMessage", () => {
     expect(hook.error.value).toBeNull();
     scope.stop();
   });
+
+  describe("EIP-1193 wallet errors", () => {
+    async function failWith(cause: unknown) {
+      const scope = effectScope();
+      const hook = scope.run(() =>
+        useSignMessage(vi.fn().mockRejectedValue(cause)),
+      )!;
+      const thrown = await hook.signMessage("hello").catch((err) => err);
+      const error = hook.error.value;
+      scope.stop();
+      return { error, thrown };
+    }
+
+    it("keeps code 4100 from a plain provider error object", async () => {
+      const cause = {
+        code: 4100,
+        message:
+          "The requested account and/or method has not been authorized by the user.",
+      };
+      const { error, thrown } = await failWith(cause);
+      expect(error?.code).toBe(4100);
+      expect(error?.message).toBe(cause.message);
+      expect(error?.cause).toBe(cause);
+      expect(thrown).toBe(error);
+    });
+
+    it("still surfaces a 4001 as a user rejection", async () => {
+      const { error } = await failWith({
+        code: 4001,
+        message: "User rejected the request.",
+      });
+      expect(error?.code).toBe(4001);
+      expect(error?.message).toBe("User rejected the request.");
+
+      // An Error carrying 4001 is passed through as the same object.
+      const rejection = Object.assign(new Error("User rejected the request."), {
+        code: 4001,
+      });
+      const second = await failWith(rejection);
+      expect(second.error).toBe(rejection);
+    });
+
+    it("keeps a generic Error unchanged and a bare failure generic", async () => {
+      const generic = new Error("boom");
+      const first = await failWith(generic);
+      expect(first.error).toBe(generic);
+      expect(first.error?.code).toBeUndefined();
+
+      const second = await failWith({});
+      expect(second.error?.message).toBe("Signing failed");
+      expect(second.error?.code).toBeUndefined();
+    });
+  });
 });
