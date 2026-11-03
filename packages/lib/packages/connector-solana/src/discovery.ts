@@ -102,7 +102,10 @@ export function createProviderFromWalletStandard(
    * `accounts`, so the wallet's object is preferred over the copy from connect.
    */
   const currentAccount = (): WalletStandardAccount => {
-    const address = getAddress?.() ?? connectedAccount?.address;
+    // With a session reader, it alone decides: falling back to the account
+    // from connect would let a held provider keep signing after the session
+    // that owned that account has ended.
+    const address = getAddress ? getAddress() : connectedAccount?.address;
     if (!address) {
       throw new Error("Wallet Standard wallet has no connected account");
     }
@@ -164,6 +167,9 @@ export function createProviderFromWalletStandard(
       };
     },
     async disconnect() {
+      // Cleared first and unconditionally: a wallet that rejects or throws on
+      // disconnect must not leave this adapter able to sign for the account.
+      connectedAccount = undefined;
       await disconnectFeature?.disconnect();
     },
     async signMessage(message) {

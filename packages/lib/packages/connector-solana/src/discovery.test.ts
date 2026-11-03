@@ -346,5 +346,34 @@ describe("createProviderFromWalletStandard", () => {
       );
       expect(signMessage).not.toHaveBeenCalled();
     });
+
+    it("refuses to sign after disconnect even while the wallet lists the account", async () => {
+      const { w, signMessage } = walletWithEvents();
+      const provider = createProviderFromWalletStandard(w as never);
+      await provider.connect();
+      await provider.disconnect();
+
+      await expect(provider.signMessage(new Uint8Array([1]))).rejects.toThrow(
+        /no connected account/,
+      );
+      expect(signMessage).not.toHaveBeenCalled();
+    });
+
+    it("does not fall back to the connected account when the session reader has none", async () => {
+      const { w, signMessage } = walletWithEvents();
+      let address: string | undefined = ADDR;
+      const provider = createProviderFromWalletStandard(
+        w as never,
+        undefined,
+        () => address,
+      );
+      await provider.connect();
+      address = undefined;
+
+      await expect(provider.signMessage(new Uint8Array([1]))).rejects.toThrow(
+        /no connected account/,
+      );
+      expect(signMessage).not.toHaveBeenCalled();
+    });
   });
 });

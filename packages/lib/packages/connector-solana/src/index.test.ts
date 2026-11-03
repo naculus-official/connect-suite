@@ -1106,4 +1106,95 @@ describe("SolanaConnector — Wallet Standard session sync", () => {
       },
     ).toHaveProperty("chain", "solana:devnet");
   });
+
+  it("a held wallet provider cannot sign after disconnect", async () => {
+    const { wallet, signMessage, signAndSendTransaction } = standardWallet();
+    connector.registerWallet(wallet);
+    const session = await connector.connect("wallet-standard-std");
+    const provider = connector
+      .getDiscoveredWallets()
+      .find((w) => w.id === "wallet-standard-std")?.provider;
+    expect(provider).toBeDefined();
+
+    await connector.disconnect(session);
+
+    await expect(provider?.signMessage(new Uint8Array([1]))).rejects.toThrow();
+    await expect(
+      provider?.signAndSendTransaction(new Uint8Array([1])),
+    ).rejects.toThrow();
+    expect(signMessage).not.toHaveBeenCalled();
+    expect(signAndSendTransaction).not.toHaveBeenCalled();
+  });
+
+  it("switchChain refuses a session whose id is not the active one", async () => {
+    const { wallet, signAndSendTransaction } = standardWallet();
+    connector.registerWallet(wallet);
+    const session = await connector.connect("wallet-standard-std");
+    const other = structuredClone(session);
+    other.id = "solana-restored-elsewhere";
+
+    await expect(connector.switchChain(other, DEVNET)).rejects.toMatchObject({
+      code: "session_not_found",
+    });
+    expect(other.namespaces.solana?.chains).toEqual([
+      session.namespaces.solana?.chains[0],
+    ]);
+
+    await connector.sendTransaction(session, {
+      transaction: { serialized: [1, 2, 3] },
+    });
+    expect(
+      (signAndSendTransaction.mock.calls[0] as unknown[])[0] as {
+        chain: unknown;
+      },
+    ).toHaveProperty("chain", "solana:mainnet");
+  });
+
+  it("switchChain rewrites the CAIP-10 account prefix on the copy and the live session", async () => {
+    const { wallet } = standardWallet();
+    connector.registerWallet(wallet);
+    const session = await connector.connect("wallet-standard-std");
+    const copy = structuredClone(session);
+
+    await connector.switchChain(copy, DEVNET);
+
+    expect(copy.namespaces.solana?.chains).toEqual([DEVNET]);
+    expect(copy.namespaces.solana?.accounts).toEqual([
+      `${DEVNET}:${FIRST.address}`,
+    ]);
+    expect(session.namespaces.solana?.chains).toEqual([DEVNET]);
+    expect(session.namespaces.solana?.accounts).toEqual([
+      `${DEVNET}:${FIRST.address}`,
+    ]);
+  });
+
+  it("roles from before an account switch refuse to sign", async () => {
+    const { wallet, emit, signAndSendTransaction } = standardWallet();
+    connector.registerWallet(wallet);
+    const session = await connector.connect("wallet-standard-std");
+    const roles = connector.getRoles(session);
+    expect(roles?.payer?.address).toBe(FIRST.address);
+
+    wallet.accounts = [SECOND];
+    emit("change", { accounts: [SECOND] });
+
+    await expect(
+      roles?.payer?.signAndSendTransaction(new Uint8Array([1])),
+    ).rejects.toThrow(/account changed/);
+    expect(signAndSendTransaction).not.toHaveBeenCalled();
+  });
+
+  it("roles from before a chain switch refuse to sign", async () => {
+    const { wallet, signAndSendTransaction } = standardWallet();
+    connector.registerWallet(wallet);
+    const session = await connector.connect("wallet-standard-std");
+    const roles = connector.getRoles(session);
+
+    await connector.switchChain(session, DEVNET);
+
+    await expect(
+      roles?.payer?.signAndSendTransaction(new Uint8Array([1])),
+    ).rejects.toMatchObject({ code: "chain_mismatch" });
+    expect(signAndSendTransaction).not.toHaveBeenCalled();
+  });
 });

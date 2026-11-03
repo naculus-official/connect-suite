@@ -195,9 +195,9 @@ class SolanaConnectorImpl implements UniversalConnector {
     try {
       provider = createProviderFromWalletStandard(
         wallet,
-        () =>
-          this.activeSession?.session.namespaces.solana?.chains[0] ??
-          this.defaultChain,
+        // No fallback to defaultChain: without a live session there is no
+        // chain to send on, and sign-and-send must refuse.
+        () => this.activeSession?.session.namespaces.solana?.chains[0],
         () => this.activeSession?.publicKey,
       );
     } catch {
@@ -639,7 +639,18 @@ class SolanaConnectorImpl implements UniversalConnector {
       active.session.namespaces.solana?.chains[0] ??
       session.namespaces.solana?.chains[0] ??
       this.defaultChain;
-    return solanaRoles(active.wallet, active.publicKey, chain);
+    const wallet = active.wallet;
+    return bindRolesToSession(
+      solanaRoles(wallet, active.publicKey, chain),
+      () => {
+        const live = this.activeSession;
+        if (!live || live.wallet !== wallet) return null;
+        return {
+          address: live.publicKey,
+          chain: live.session.namespaces.solana?.chains[0],
+        };
+      },
+    );
   }
 
   async signMessage(
@@ -772,18 +783,23 @@ class SolanaConnectorImpl implements UniversalConnector {
         "Unsupported Solana chain. Use a canonical CAIP-2 genesis-hash chain ID.",
       );
     }
-    if (ns.chains) {
-      ns.chains = [chainId];
-    }
-    // Signing reads the chain from the live session, so it must change too
-    // when the caller passes a copy (a restored or cloned session).
+    // Signing reads the chain from the live session. A session with another
+    // id is not this connection: changing only the caller's copy would show
+    // one network while sends went to another, so it is refused.
     const active = this.activeSession;
-    const activeNs =
-      active && active.session.id === session.id
-        ? active.session.namespaces.solana
-        : undefined;
-    if (activeNs && activeNs !== ns) {
-      activeNs.chains = [chainId];
+    if (active && active.session.id !== session.id) {
+      throw new WalletError(
+        "session_not_found",
+        "switchChain was given a session that is not the active Solana session. Reconnect, or pass the active session.",
+      );
+    }
+    rekeyNamespace(ns, chainId);
+    // The caller may pass a copy (a restored or cloned session) with the same
+    // id; the live session must change too.
+    const activeNs = active?.session.namespaces.solana;
+    if (active && activeNs && activeNs !== ns) {
+      rekeyNamespace(activeNs, chainId);
+      active.session.updatedAt = new Date().toISOString();
     }
   }
 
@@ -804,6 +820,89 @@ class SolanaConnectorImpl implements UniversalConnector {
     this.listeners.clear();
     this.accountsSubscribers.clear();
   }
+}
+
+/**
+ * Point a solana namespace at `chainId`: its chains, and the chain prefix of
+ * every CAIP-10 account (`solana:<reference>:<address>`).
+ */
+function rekeyNamespace(
+  ns: { chains: string[]; accounts: string[] },
+  chainId: string,
+): void {
+  if (ns.chains) {
+    ns.chains = [chainId];
+  }
+  if (Array.isArray(ns.accounts)) {
+    ns.accounts = ns.accounts.map((account) => {
+      const address = account.slice(account.lastIndexOf(":") + 1);
+      return `${chainId}:${address}`;
+    });
+  }
+}
+
+/**
+ * Bind roles to the live session they were built from.
+ *
+ * Roles are plain objects a caller may hold. After an in-wallet account
+ * switch, a chain switch or a disconnect, `address` and `chain` would name an
+ * identity the wallet no longer signs for, so every method checks the live
+ * session first and refuses on any difference.
+ */
+function bindRolesToSession(
+  roles: SolanaRoles,
+  live: () => { address: string; chain: string | undefined } | null,
+): SolanaRoles {
+  const { address, chain } = roles.identity;
+  const check = () => {
+    const current = live();
+    if (!current) {
+      throw new WalletError(
+        "session_expired",
+        "Solana session ended. Reconnect and call getRoles() again.",
+      );
+    }
+    if (current.address !== address) {
+      throw new WalletError(
+        "session_expired",
+        `Solana account changed from ${address} to ${current.address}. Call getRoles() again.`,
+      );
+    }
+    if (current.chain !== chain) {
+      throw new WalletError(
+        "chain_mismatch",
+        `Solana chain changed from ${chain} to ${current.chain}. Call getRoles() again.`,
+      );
+    }
+  };
+  const guard =
+    <A extends unknown[], R>(fn: (...args: A) => Promise<R>) =>
+    async (...args: A): Promise<R> => {
+      check();
+      return fn(...args);
+    };
+  const { signer, payer } = roles;
+  return {
+    ...roles,
+    signer: signer
+      ? {
+          ...signer,
+          ...(signer.signMessage
+            ? { signMessage: guard(signer.signMessage) }
+            : {}),
+          signTransaction: guard(signer.signTransaction),
+          ...(signer.signAllTransactions
+            ? { signAllTransactions: guard(signer.signAllTransactions) }
+            : {}),
+        }
+      : null,
+    payer: payer
+      ? {
+          ...payer,
+          signAndSendTransaction: guard(payer.signAndSendTransaction),
+        }
+      : null,
+  };
 }
 
 export const solanaConnector = new SolanaConnectorImpl();
