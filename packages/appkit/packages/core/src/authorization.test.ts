@@ -369,7 +369,10 @@ describe("explainSpend", () => {
           },
         ],
       }),
-      request({ amount: 1_000_000n, periodSpentSoFar: 1_500_000n }),
+      request({
+        amount: 1_000_000n,
+        periodUsage: { periodIndex: 1157, spent: 1_500_000n },
+      }),
       "This amount exceeds the limit for the current period.",
     ],
     [

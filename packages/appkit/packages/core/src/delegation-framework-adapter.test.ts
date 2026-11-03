@@ -18,6 +18,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   createDelegationFrameworkAdapter,
   type RedemptionCodec,
+  type RedemptionRpc,
 } from "./delegation-framework-adapter";
 import {
   createDelegationPolicyFlow,
@@ -64,6 +65,7 @@ function transfer(to: string, amount: bigint) {
 function setup(
   overrides: Partial<DelegationPolicyDeps> = {},
   wrapAdapter: (a: PolicyExecutionAdapter) => PolicyExecutionAdapter = (a) => a,
+  rpcOverrides: Partial<RedemptionRpc> = {},
 ) {
   const manager = new SessionKeyManager(
     { pbkdf2Iterations: 1_000, unsafeAllowWeakKdf: true, encryptionKey: "k" },
@@ -85,6 +87,7 @@ function setup(
         sent.push(raw);
         return TX_HASH;
       },
+      ...rpcOverrides,
     },
   });
   const deps: DelegationPolicyDeps = {
@@ -294,5 +297,86 @@ describe("eip7702 policies", () => {
     expect(sessions.every((s) => s.status !== "active" || !s.authorized)).toBe(
       true,
     );
+  });
+});
+
+describe("eip7702 policies with period limits", () => {
+  // Chain time in window 0 of a 100 s period; the device clock is far past it.
+  const START = 1_000_000;
+  const periodScope = {
+    ...scope,
+    periodLimits: { [USDC]: { amount: 500n, seconds: 100, start: START } },
+  };
+
+  it("signs with chainTime from the latest block and a 60 s margin", async () => {
+    const latestBlock = vi.fn(async () => ({
+      timestamp: `0x${(START + 10).toString(16)}` as `0x${string}`,
+    }));
+    const { flow, manager, sent } = setup({}, undefined, { latestBlock });
+    const sign = vi.spyOn(manager, "signTransactionDelegationRedemption");
+    const policy = await flow.createPolicy(periodScope);
+
+    await expect(
+      flow.executePolicy(policy.id, transfer(PAYEE, 400n)),
+    ).resolves.toMatchObject({ hash: TX_HASH, status: "submitted" });
+    expect(latestBlock).toHaveBeenCalledTimes(1);
+    expect(sign).toHaveBeenCalledTimes(1);
+    expect(sign.mock.calls[0]?.[4]).toEqual({
+      timestamp: START + 10,
+      inclusionMarginSeconds: 60,
+    });
+    expect(sent).toHaveLength(1);
+  });
+
+  it("applies the 60 s margin: refuses 50 s before the period ends", async () => {
+    const { flow, sent } = setup({}, undefined, {
+      latestBlock: async () => ({ timestamp: START + 50 }),
+    });
+    const policy = await flow.createPolicy(periodScope);
+    await expect(
+      flow.executePolicy(policy.id, transfer(PAYEE, 1n)),
+    ).rejects.toMatchObject({
+      code: "session_key_scope_exceeded",
+      details: expect.stringMatching(/next period/),
+    });
+    expect(sent).toEqual([]);
+  });
+
+  it.each([
+    ["no latestBlock method", {}],
+    ["a null block", { latestBlock: async () => null }],
+    ["a block without a timestamp", { latestBlock: async () => ({}) as never }],
+    ["a zero timestamp", { latestBlock: async () => ({ timestamp: 0 }) }],
+    [
+      "a non-hex timestamp",
+      { latestBlock: async () => ({ timestamp: "1000010" as never }) },
+    ],
+    [
+      "an unsafe timestamp",
+      { latestBlock: async () => ({ timestamp: 2 ** 53 }) },
+    ],
+  ])("refuses with %s, before signing or broadcasting", async (_name, rpc) => {
+    const send = vi.fn(async () => TX_HASH);
+    const { flow, manager } = setup({}, undefined, {
+      sendRawTransaction: send,
+      ...(rpc as Partial<RedemptionRpc>),
+    });
+    const sign = vi.spyOn(manager, "signTransactionDelegationRedemption");
+    const policy = await flow.createPolicy(periodScope);
+    await expect(
+      flow.executePolicy(policy.id, transfer(PAYEE, 1n)),
+    ).rejects.toMatchObject({ code: "invalid_input" });
+    expect(sign).not.toHaveBeenCalled();
+    expect(send).not.toHaveBeenCalled();
+  });
+
+  it("does not read the block for a scope without period limits", async () => {
+    const latestBlock = vi.fn(async () => null);
+    const { flow, manager } = setup({}, undefined, { latestBlock });
+    const sign = vi.spyOn(manager, "signTransactionDelegationRedemption");
+    const policy = await flow.createPolicy(scope);
+    await flow.executePolicy(policy.id, transfer(PAYEE, 1n));
+    expect(latestBlock).not.toHaveBeenCalled();
+    expect(sign.mock.calls[0]?.[4]).toBeUndefined();
   });
 });

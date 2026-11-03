@@ -143,6 +143,9 @@ export interface DelegationPolicyDeps {
 /** The typed data an owner signs to authorize an `eip7702` policy. */
 export type DelegationTypedData = ReturnType<typeof delegationTypedData>;
 
+/** Seconds a period-limited redemption is given to be included (as wallet-engine). */
+const PERIOD_INCLUSION_MARGIN_SECONDS = 60;
+
 /** Whether the account delegates to the framework's stateless DeleGator. */
 function delegatesToStatelessDeleGator(delegation: {
   delegated: boolean | null;
@@ -669,6 +672,8 @@ export function createDelegationPolicyFlow(
             maxFeePerGas: bigint;
             maxPriorityFeePerGas: bigint;
           };
+          // The latest block's timestamp; present for a period-limited scope.
+          chainTimestamp?: unknown;
         }
       | null
       | undefined;
@@ -721,11 +726,35 @@ export function createDelegationPolicyFlow(
       maxFeePerGas: hex(unsigned.maxFeePerGas),
       maxPriorityFeePerGas: hex(unsigned.maxPriorityFeePerGas),
     };
+    let chainTime:
+      | { timestamp: number; inclusionMarginSeconds: number }
+      | undefined;
+    if (payload.chainTimestamp !== undefined) {
+      const raw = payload.chainTimestamp;
+      const timestamp =
+        typeof raw === "number"
+          ? raw
+          : typeof raw === "string" && /^0x[0-9a-fA-F]+$/.test(raw)
+            ? Number(raw)
+            : Number.NaN;
+      if (!Number.isSafeInteger(timestamp) || timestamp <= 0) {
+        throw new WalletError(
+          "invalid_input",
+          "The latest block has no usable timestamp.",
+        );
+      }
+      chainTime = {
+        timestamp,
+        inclusionMarginSeconds: PERIOD_INCLUSION_MARGIN_SECONDS,
+      };
+    }
+    // Without chainTime, connect-core refuses a scope with periodLimits.
     return manager.signTransactionDelegationRedemption(
       policyId,
       tx,
       { gas: payload.outerTx.gas },
       payload.execution,
+      chainTime,
     );
   };
 

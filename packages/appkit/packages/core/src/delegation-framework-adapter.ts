@@ -59,6 +59,13 @@ export interface RedemptionRpc {
   }) => Promise<bigint>;
   fees: () => Promise<{ maxFeePerGas: bigint; maxPriorityFeePerGas: bigint }>;
   sendRawTransaction: (raw: `0x${string}`) => Promise<`0x${string}`>;
+  /**
+   * The latest block (`eth_getBlockByNumber("latest")`), or null. Required for
+   * a policy with `periodLimits`: the on-chain period enforcers count the
+   * period at `block.timestamp`, so signing needs the chain's time. Without
+   * it, a period-limited redemption is refused before signing.
+   */
+  latestBlock?: () => Promise<{ timestamp: number | `0x${string}` } | null>;
 }
 
 export interface DelegationFrameworkAdapterOptions {
@@ -79,6 +86,11 @@ interface RedemptionPayload {
   };
   execution: FrameworkExecution;
   unsigned: RedemptionTransaction;
+  /**
+   * The latest block's timestamp (seconds), as the RPC returned it; set when
+   * the scope has `periodLimits`. The signing flow validates it.
+   */
+  chainTimestamp?: number | `0x${string}`;
 }
 
 export function createDelegationFrameworkAdapter(
@@ -143,6 +155,19 @@ export function createDelegationFrameworkAdapter(
         rpc.estimateGas({ from, to: call.to, data: call.data }),
         rpc.fees(),
       ]);
+      // The on-chain period enforcers pick the window from block.timestamp, so
+      // a period-limited redemption is signed against the chain's time.
+      let chainTimestamp: number | `0x${string}` | undefined;
+      if (Object.keys(policy.scope.periodLimits ?? {}).length > 0) {
+        const block = rpc.latestBlock ? await rpc.latestBlock() : null;
+        if (block?.timestamp === undefined || block.timestamp === null) {
+          throw new WalletError(
+            "invalid_input",
+            "The latest block has no usable timestamp.",
+          );
+        }
+        chainTimestamp = block.timestamp;
+      }
       const unsigned: RedemptionTransaction = {
         type: "eip1559",
         chainId,
@@ -164,6 +189,7 @@ export function createDelegationFrameworkAdapter(
         },
         execution,
         unsigned,
+        ...(chainTimestamp !== undefined ? { chainTimestamp } : {}),
       };
       const hex = (value: bigint | number) => `0x${value.toString(16)}`;
       return {
