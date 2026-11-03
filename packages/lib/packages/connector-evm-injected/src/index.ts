@@ -1120,6 +1120,42 @@ class EIP6963ConnectorImpl implements UniversalConnector {
       }
     }
 
+    // A null reply to wallet_switchEthereumChain is not proof the wallet moved:
+    // Phantom answered null and stayed on the old chain (Base Sepolia, and the
+    // Sepolia -> Base Sepolia direction). Read the chain back and fail closed —
+    // a provider that cannot answer eth_chainId gets the same error, so the
+    // session is never promoted to a chain the wallet may not be on.
+    let reportedChainId: unknown;
+    try {
+      reportedChainId = await eip6963Session.wallet.provider.request({
+        method: "eth_chainId",
+      });
+    } catch (error: unknown) {
+      throw new WalletError(
+        "chain_mismatch",
+        `Could not confirm chain switch to ${hexChainId}: eth_chainId failed.`,
+        undefined,
+        error,
+      );
+    }
+    let reportedReference: string | undefined;
+    if (
+      (typeof reportedChainId === "string" && reportedChainId.length > 0) ||
+      typeof reportedChainId === "number"
+    ) {
+      try {
+        reportedReference = BigInt(reportedChainId).toString();
+      } catch {
+        reportedReference = undefined;
+      }
+    }
+    if (reportedReference !== normalizedChainId.slice("eip155:".length)) {
+      throw new WalletError(
+        "chain_mismatch",
+        `Wallet did not switch to ${hexChainId}; it reports ${String(reportedChainId)}.`,
+      );
+    }
+
     // Every reader in this connector treats `chains[0]` as the active chain —
     // including `normalizeEvmTransaction`, whose chain_mismatch guard compares
     // a caller-supplied chainId against it. Appending, and skipping the update
