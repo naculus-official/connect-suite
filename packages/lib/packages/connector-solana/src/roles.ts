@@ -100,7 +100,11 @@ export function featuresFromWalletStandard(
   return {
     signMessage: "solana:signMessage" in features,
     signTransaction: "solana:signTransaction" in features,
-    signAllTransactions: "solana:signAllTransactions" in features,
+    // `solana:signTransaction` is variadic, so it signs a batch in one
+    // approval; the provider's `signAllTransactions` falls back to it.
+    signAllTransactions:
+      "solana:signAllTransactions" in features ||
+      "solana:signTransaction" in features,
     signAndSendTransaction: "solana:signAndSendTransaction" in features,
   };
 }

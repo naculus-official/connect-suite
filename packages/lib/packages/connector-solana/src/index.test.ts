@@ -1216,7 +1216,7 @@ describe("SolanaConnector — Wallet Standard session sync", () => {
   });
 
   it("getRoles refuses a session from before a disconnect and reconnect", async () => {
-    const { wallet, signAndSendTransaction } = standardWallet();
+    const { wallet } = standardWallet();
     connector.registerWallet(wallet);
     const first = await connector.connect("wallet-standard-std");
     await connector.disconnect(first);
@@ -1225,7 +1225,56 @@ describe("SolanaConnector — Wallet Standard session sync", () => {
 
     // S1 must not obtain a live signer bound to S2.
     expect(connector.getRoles(first)).toBeNull();
-    expect(signAndSendTransaction).not.toHaveBeenCalled();
+  });
+
+  it("getRoles refuses a missing session while one is active", async () => {
+    const { wallet } = standardWallet();
+    connector.registerWallet(wallet);
+    const session = await connector.connect("wallet-standard-std");
+    expect(connector.getRoles(session)).not.toBeNull();
+
+    expect(connector.getRoles(null as never)).toBeNull();
+    expect(connector.getRoles(undefined as never)).toBeNull();
+  });
+
+  it("roles expose a batch sign for a wallet that registers only solana:signTransaction", async () => {
+    const { wallet } = standardWallet();
+    const signTransaction = vi.fn(async () => [
+      { signedTransaction: new Uint8Array([8]) },
+      { signedTransaction: new Uint8Array([9]) },
+    ]);
+    (wallet.features as Record<string, unknown>)["solana:signTransaction"] = {
+      signTransaction,
+    };
+    connector.registerWallet(wallet);
+    const session = await connector.connect("wallet-standard-std");
+    const roles = connector.getRoles(session);
+    const signAll = roles?.signer?.signAllTransactions;
+    expect(signAll).toBeTypeOf("function");
+
+    const txs = [new Uint8Array([1]), new Uint8Array([2])];
+    await expect(signAll?.(txs)).resolves.toEqual([
+      new Uint8Array([8]),
+      new Uint8Array([9]),
+    ]);
+    expect(signTransaction).toHaveBeenCalledTimes(1);
+    const inputs = signTransaction.mock.calls[0] as unknown as {
+      account: { address: string };
+      transaction: Uint8Array;
+    }[];
+    expect(inputs).toHaveLength(2);
+    expect(inputs.map((i) => i.account.address)).toEqual([
+      FIRST.address,
+      FIRST.address,
+    ]);
+    expect(inputs.map((i) => i.transaction)).toEqual(txs);
+
+    // Through the session guard: dead once the session ends.
+    await connector.disconnect(session);
+    await expect(signAll?.(txs)).rejects.toMatchObject({
+      code: "session_expired",
+    });
+    expect(signTransaction).toHaveBeenCalledTimes(1);
   });
 
   it("getRoles still serves the current session after a reconnect", async () => {

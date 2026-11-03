@@ -232,8 +232,8 @@ describe("createProviderFromWalletStandard", () => {
       const res = await provider.signAllTransactions(txs);
       expect(signAllTransactions).toHaveBeenCalledTimes(1);
       expect(signAllTransactions.mock.calls[0]).toEqual([
-        { account: ACCOUNT, transaction: txs[0] },
-        { account: ACCOUNT, transaction: txs[1] },
+        { account: ACCOUNT, transaction: txs[0], chain: "solana:mainnet" },
+        { account: ACCOUNT, transaction: txs[1], chain: "solana:mainnet" },
       ]);
       expect(res).toEqual(signed);
     });
@@ -268,21 +268,68 @@ describe("createProviderFromWalletStandard", () => {
       const res = await provider.signAllTransactions(txs);
       expect(signTransaction).toHaveBeenCalledTimes(1);
       expect(signTransaction.mock.calls[0]).toEqual([
-        { account: ACCOUNT, transaction: txs[0] },
-        { account: ACCOUNT, transaction: txs[1] },
+        { account: ACCOUNT, transaction: txs[0], chain: "solana:mainnet" },
+        { account: ACCOUNT, transaction: txs[1], chain: "solana:mainnet" },
       ]);
       expect(res).toEqual(signed);
     });
 
+    it("batch inputs carry the Wallet Standard chain the session resolves to", async () => {
+      const signTransaction = vi.fn(async () => [
+        { signedTransaction: new Uint8Array([8]) },
+      ]);
+      const provider = await connected(
+        { "solana:signTransaction": { signTransaction } },
+        "solana:EtWTRABZaYq6iMfeYKouRu166VU2xqa1",
+      );
+      const tx = new Uint8Array([1]);
+      await provider.signAllTransactions([tx]);
+      expect(signTransaction.mock.calls[0]).toEqual([
+        { account: ACCOUNT, transaction: tx, chain: "solana:devnet" },
+      ]);
+    });
+
+    it("batch inputs omit chain when the session chain does not resolve", async () => {
+      const signTransaction = vi.fn(async () => [
+        { signedTransaction: new Uint8Array([8]) },
+      ]);
+      const provider = await connected(
+        { "solana:signTransaction": { signTransaction } },
+        "solana:not-a-known-cluster",
+      );
+      const tx = new Uint8Array([1]);
+      await provider.signAllTransactions([tx]);
+      expect(signTransaction.mock.calls[0]).toEqual([
+        { account: ACCOUNT, transaction: tx },
+      ]);
+    });
+
+    it("signAllTransactions with no transactions returns [] without calling the wallet", async () => {
+      const signTransaction = vi.fn();
+      const signAllTransactions = vi.fn();
+      const provider = await connected({
+        "solana:signTransaction": { signTransaction },
+        "solana:signAllTransactions": { signAllTransactions },
+      });
+      await expect(provider.signAllTransactions([])).resolves.toEqual([]);
+      expect(signTransaction).not.toHaveBeenCalled();
+      expect(signAllTransactions).not.toHaveBeenCalled();
+    });
+
     it("refuses signAllTransactions when neither batch feature is registered", async () => {
       const signMessage = vi.fn();
+      const signAndSendTransaction = vi.fn();
       const provider = await connected({
         "solana:signMessage": { signMessage },
+        "solana:signAndSendTransaction": { signAndSendTransaction },
         "solana:signTransaction": undefined,
       });
       await expect(
         provider.signAllTransactions([new Uint8Array([1])]),
       ).rejects.toThrow(/solana:signAllTransactions or solana:signTransaction/);
+      // The registered signing features must not stand in for a batch sign;
+      // sign-and-send in particular would broadcast what was only to be signed.
+      expect(signAndSendTransaction).not.toHaveBeenCalled();
       expect(signMessage).not.toHaveBeenCalled();
     });
   });

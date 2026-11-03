@@ -55,6 +55,15 @@ describe("featuresFromWalletStandard", () => {
       signAndSendTransaction: true,
     });
   });
+
+  it("reports a batch sign for a wallet that registers only solana:signTransaction", () => {
+    expect(
+      featuresFromWalletStandard({
+        "standard:connect": {},
+        "solana:signTransaction": {},
+      }).signAllTransactions,
+    ).toBe(true);
+  });
 });
 
 describe("featuresFromLegacyProvider", () => {

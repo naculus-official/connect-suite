@@ -200,7 +200,16 @@ export function createProviderFromWalletStandard(
       // Resolved first so the disconnect and account-change guards apply,
       // and each input names the account as the single-transaction methods do.
       const account = currentAccount();
-      const inputs = txs.map((transaction) => ({ account, transaction }));
+      if (txs.length === 0) return [];
+      // Optional on `solana:signTransaction` input; sent when the session
+      // chain maps to a Wallet Standard chain, as sign-and-send does.
+      const caip2 = getChain?.();
+      const chain = caip2 ? WALLET_STANDARD_CHAINS[caip2] : undefined;
+      const inputs = txs.map((transaction) => ({
+        account,
+        transaction,
+        ...(chain ? { chain } : {}),
+      }));
       // `solana:signAllTransactions` is not a Wallet Standard feature, so
       // compliant wallets do not register it. `solana:signTransaction` is
       // variadic and is the standard way to sign a batch in one prompt.
