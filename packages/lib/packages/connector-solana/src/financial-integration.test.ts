@@ -199,28 +199,18 @@ describe("Solana Financial Integration: Error Handling", () => {
   });
 
   it("throws user_rejected on signMessage rejection", async () => {
-    await connector.connect();
+    const session = await connector.connect();
     mockProvider.signMessage.mockRejectedValueOnce(new Error("User rejected"));
-    const session = {
-      namespaces: {
-        solana: {
-          accounts: [
-            `${SOLANA_MAINNET}:7EcDhSYGxXyscszYEp35KHN8vvw3svAuLKTzXwCFLtPb`,
-          ],
-        },
-      },
-    } as any;
     await expect(
       connector.signMessage(session, { message: "hello" }),
     ).rejects.toThrow("rejected");
   });
 
   it("throws user_rejected on signTransaction rejection", async () => {
-    await connector.connect();
+    const session = await connector.connect();
     mockProvider.signTransaction.mockRejectedValueOnce(
       new Error("User rejected"),
     );
-    const session = { namespaces: { solana: { accounts: [] } } } as any;
     await expect(
       connector.signTransaction(session, {
         transaction: { serialized: [1, 2, 3] },
@@ -229,24 +219,21 @@ describe("Solana Financial Integration: Error Handling", () => {
   });
 
   it("throws on missing message param", async () => {
-    await connector.connect();
-    const session = { namespaces: { solana: { accounts: [] } } } as any;
+    const session = await connector.connect();
     await expect(connector.signMessage(session, {})).rejects.toThrow(
       "Missing message",
     );
   });
 
   it("throws on missing transaction param", async () => {
-    await connector.connect();
-    const session = { namespaces: { solana: { accounts: [] } } } as any;
+    const session = await connector.connect();
     await expect(connector.signTransaction(session, {})).rejects.toThrow(
       "Missing transaction",
     );
   });
 
   it("throws on invalid transaction data", async () => {
-    await connector.connect();
-    const session = { namespaces: { solana: { accounts: [] } } } as any;
+    const session = await connector.connect();
     await expect(
       connector.signTransaction(session, {
         transaction: { serialized: "not-an-array" },
@@ -262,11 +249,10 @@ describe("Solana Financial Integration: Error Handling", () => {
   });
 
   it("throws tx_failed on sendTransaction rejection", async () => {
-    await connector.connect();
+    const session = await connector.connect();
     mockProvider.signAndSendTransaction.mockRejectedValueOnce(
       new Error("RPC error"),
     );
-    const session = { namespaces: { solana: { accounts: [] } } } as any;
     await expect(
       connector.sendTransaction(session, {
         transaction: { serialized: [1, 2, 3] },

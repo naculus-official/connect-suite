@@ -195,8 +195,22 @@ export function createProviderFromWalletStandard(
     async signAllTransactions(txs) {
       if (!signAllTxFeature)
         throw new Error("Wallet does not support solana:signAllTransactions");
-      const result = await signAllTxFeature.signAllTransactions(txs);
-      return result.signedTransactions ?? result;
+      // Resolved first so the disconnect and account-change guards apply,
+      // and each input names the account as the single-transaction methods do.
+      const account = currentAccount();
+      const output = await signAllTxFeature.signAllTransactions(
+        ...txs.map((transaction) => ({ account, transaction })),
+      );
+      // One output per input: a short array would silently drop a
+      // transaction the caller believes was signed.
+      if (!Array.isArray(output) || output.length !== txs.length) {
+        throw new Error(
+          "Wallet returned malformed output: signedTransactions length mismatch",
+        );
+      }
+      return txs.map((_, index) =>
+        requireOutput(output, "signedTransaction", isNonEmptyBytes, index),
+      );
     },
     async signAndSendTransaction(tx) {
       if (!signSendTxFeature)
@@ -283,11 +297,13 @@ function requireOutput(
   output: unknown,
   field: string,
   valid: (value: unknown) => value is Uint8Array,
+  /** Which output to read; the input at the same position produced it. */
+  index = 0,
 ): Uint8Array {
-  const first = Array.isArray(output) ? output[0] : undefined;
+  const entry = Array.isArray(output) ? output[index] : undefined;
   const value =
-    first && typeof first === "object"
-      ? (first as Record<string, unknown>)[field]
+    entry && typeof entry === "object"
+      ? (entry as Record<string, unknown>)[field]
       : undefined;
   if (!valid(value)) {
     throw new Error(`Wallet returned malformed output: invalid ${field}`);

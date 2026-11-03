@@ -96,6 +96,9 @@ function walletStandardId(name: string): string {
   return `wallet-standard-${name.toLowerCase().replace(/\s+/g, "-")}`;
 }
 
+/** Distinguishes sessions created within the same millisecond. */
+let sessionSequence = 0;
+
 class SolanaConnectorImpl implements UniversalConnector {
   readonly id = "solana";
   readonly name = "Solana Wallets";
@@ -438,7 +441,9 @@ class SolanaConnectorImpl implements UniversalConnector {
         : this.defaultChain;
 
       const session = createEmptySession({
-        id: `solana-${wallet.id}-${Date.now()}`,
+        // The sequence keeps two connects in the same millisecond distinct:
+        // held roles compare this id to tell a reconnect from the old session.
+        id: `solana-${wallet.id}-${Date.now()}-${++sessionSequence}`,
         walletId: wallet.id,
         walletType: "solana",
         namespaces: {
@@ -599,19 +604,49 @@ class SolanaConnectorImpl implements UniversalConnector {
   }
 
   async disconnect(_session: UniversalWalletSession): Promise<void> {
-    if (this.activeSession) {
-      try {
-        await this.activeSession.wallet.provider.disconnect();
-      } catch (err) {
-        // Logged, not surfaced, and deliberately not rethrown: the local
-        // teardown below has to happen either way. A user who asks to
-        // disconnect must end up disconnected here even when the wallet
-        // refuses to hear it.
-        logger.warn("connector-solana", "provider.disconnect failed", err);
-      }
-      this.detachEventListeners();
-      this.activeSession = null;
+    const active = this.activeSession;
+    if (!active) return;
+    // Local teardown first: a wallet whose disconnect stalls or never
+    // resolves must not keep held roles and providers signing for the
+    // session the user asked to end.
+    this.activeSession = null;
+    this.detachEventListeners();
+    try {
+      // The Wallet Standard adapter clears its connected account
+      // synchronously, before awaiting the wallet.
+      await active.wallet.provider.disconnect();
+    } catch (err) {
+      // Logged, not surfaced, and deliberately not rethrown: the local
+      // teardown above has already happened. A user who asks to disconnect
+      // must end up disconnected here even when the wallet refuses to hear it.
+      logger.warn("connector-solana", "provider.disconnect failed", err);
     }
+  }
+
+  /**
+   * The live session, if `session` is it.
+   *
+   * Signing goes through the live session's wallet. A session with another
+   * id is not this connection, so it is refused rather than signed for with
+   * whatever account is connected now — the same rule switchChain uses.
+   */
+  private requireActiveSession(
+    session: UniversalWalletSession,
+  ): SolanaConnectorSession {
+    const active = this.activeSession;
+    if (!active) {
+      throw new WalletError(
+        "session_expired",
+        "Session expired. Please reconnect your wallet.",
+      );
+    }
+    if (active.session.id !== session?.id) {
+      throw new WalletError(
+        "session_not_found",
+        "The given session is not the active Solana session. Reconnect, or pass the active session.",
+      );
+    }
+    return active;
   }
 
   async getAccounts(session: UniversalWalletSession): Promise<string[]> {
@@ -642,10 +677,12 @@ class SolanaConnectorImpl implements UniversalConnector {
     const wallet = active.wallet;
     return bindRolesToSession(
       solanaRoles(wallet, active.publicKey, chain),
+      active.session.id,
       () => {
         const live = this.activeSession;
         if (!live || live.wallet !== wallet) return null;
         return {
+          sessionId: live.session.id,
           address: live.publicKey,
           chain: live.session.namespaces.solana?.chains[0],
         };
@@ -657,12 +694,7 @@ class SolanaConnectorImpl implements UniversalConnector {
     session: UniversalWalletSession,
     input: unknown,
   ): Promise<unknown> {
-    if (!this.activeSession) {
-      throw new WalletError(
-        "session_expired",
-        "Session expired. Please reconnect your wallet.",
-      );
-    }
+    const active = this.requireActiveSession(session);
 
     if (
       !input ||
@@ -679,8 +711,7 @@ class SolanaConnectorImpl implements UniversalConnector {
     const messageBytes = new TextEncoder().encode(message);
 
     try {
-      const result =
-        await this.activeSession.wallet.provider.signMessage(messageBytes);
+      const result = await active.wallet.provider.signMessage(messageBytes);
       return Array.from(result.signature);
     } catch (err) {
       if (err instanceof WalletError) throw err;
@@ -696,12 +727,7 @@ class SolanaConnectorImpl implements UniversalConnector {
     session: UniversalWalletSession,
     input: unknown,
   ): Promise<unknown> {
-    if (!this.activeSession) {
-      throw new WalletError(
-        "session_expired",
-        "Session expired. Please reconnect your wallet.",
-      );
-    }
+    const active = this.requireActiveSession(session);
 
     if (!input || typeof input !== "object" || !("transaction" in input))
       throw new WalletError(
@@ -717,8 +743,7 @@ class SolanaConnectorImpl implements UniversalConnector {
     const txBytes = new Uint8Array(transaction.serialized);
 
     try {
-      const signedTx =
-        await this.activeSession.wallet.provider.signTransaction(txBytes);
+      const signedTx = await active.wallet.provider.signTransaction(txBytes);
       return Array.from(signedTx);
     } catch (err) {
       if (err instanceof WalletError) throw err;
@@ -734,12 +759,7 @@ class SolanaConnectorImpl implements UniversalConnector {
     session: UniversalWalletSession,
     input: unknown,
   ): Promise<unknown> {
-    if (!this.activeSession) {
-      throw new WalletError(
-        "session_expired",
-        "Session expired. Please reconnect your wallet.",
-      );
-    }
+    const active = this.requireActiveSession(session);
 
     if (!input || typeof input !== "object" || !("transaction" in input))
       throw new WalletError(
@@ -756,9 +776,7 @@ class SolanaConnectorImpl implements UniversalConnector {
 
     try {
       const result =
-        await this.activeSession.wallet.provider.signAndSendTransaction(
-          txBytes,
-        );
+        await active.wallet.provider.signAndSendTransaction(txBytes);
       return result.signature;
     } catch (err) {
       if (err instanceof WalletError) throw err;
@@ -851,12 +869,19 @@ function rekeyNamespace(
  */
 function bindRolesToSession(
   roles: SolanaRoles,
-  live: () => { address: string; chain: string | undefined } | null,
+  sessionId: string,
+  live: () => {
+    sessionId: string;
+    address: string;
+    chain: string | undefined;
+  } | null,
 ): SolanaRoles {
   const { address, chain } = roles.identity;
   const check = () => {
     const current = live();
-    if (!current) {
+    // A reconnect to the same wallet, account and chain is still a new
+    // session: roles from the ended one stay dead.
+    if (!current || current.sessionId !== sessionId) {
       throw new WalletError(
         "session_expired",
         "Solana session ended. Reconnect and call getRoles() again.",

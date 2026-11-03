@@ -198,6 +198,57 @@ describe("createProviderFromWalletStandard", () => {
       ).rejects.toThrow(/chain/);
       expect(signAndSendTransaction).not.toHaveBeenCalled();
     });
+
+    // The session reader is the only source of the chain: a live address
+    // with no chain must not fall back to a default network.
+    it("refuses to sign-and-send with a live address but no chain", async () => {
+      const signAndSendTransaction = vi.fn(async () => [
+        { signature: new Uint8Array(64) },
+      ]);
+      const w = makeWallet({
+        "solana:signAndSendTransaction": { signAndSendTransaction },
+      }) as unknown as Record<string, unknown>;
+      w.accounts = [ACCOUNT];
+      const provider = createProviderFromWalletStandard(
+        w as never,
+        () => undefined,
+        () => ADDR,
+      );
+      await expect(
+        provider.signAndSendTransaction(new Uint8Array([1])),
+      ).rejects.toThrow(/chain/);
+      expect(signAndSendTransaction).not.toHaveBeenCalled();
+    });
+
+    it("passes solana:signAllTransactions one { account, transaction } input per transaction", async () => {
+      const signed = [new Uint8Array([8]), new Uint8Array([9])];
+      const signAllTransactions = vi.fn(async () =>
+        signed.map((signedTransaction) => ({ signedTransaction })),
+      );
+      const provider = await connected({
+        "solana:signAllTransactions": { signAllTransactions },
+      });
+      const txs = [new Uint8Array([1]), new Uint8Array([2])];
+      const res = await provider.signAllTransactions(txs);
+      expect(signAllTransactions).toHaveBeenCalledTimes(1);
+      expect(signAllTransactions.mock.calls[0]).toEqual([
+        { account: ACCOUNT, transaction: txs[0] },
+        { account: ACCOUNT, transaction: txs[1] },
+      ]);
+      expect(res).toEqual(signed);
+    });
+
+    it("refuses signAllTransactions after disconnect", async () => {
+      const signAllTransactions = vi.fn();
+      const provider = await connected({
+        "solana:signAllTransactions": { signAllTransactions },
+      });
+      await provider.disconnect();
+      await expect(
+        provider.signAllTransactions([new Uint8Array([1])]),
+      ).rejects.toThrow(/no connected account/);
+      expect(signAllTransactions).not.toHaveBeenCalled();
+    });
   });
   /**
    * Wallet output is untrusted. An empty array or a wrongly sized field used
@@ -256,6 +307,35 @@ describe("createProviderFromWalletStandard", () => {
       });
       await expect(
         provider.signAndSendTransaction(new Uint8Array([1])),
+      ).rejects.toThrow(/malformed output/);
+    });
+
+    it.each([
+      ["an empty array", []],
+      ["a short array", [{ signedTransaction: new Uint8Array([1]) }]],
+      ["a bare object", { signedTransactions: [new Uint8Array([1])] }],
+      [
+        "an empty signedTransaction",
+        [
+          { signedTransaction: new Uint8Array([1]) },
+          { signedTransaction: new Uint8Array() },
+        ],
+      ],
+      [
+        "a missing signedTransaction",
+        [{ signedTransaction: new Uint8Array([1]) }, {}],
+      ],
+    ])("signAllTransactions rejects %s", async (_label, output) => {
+      const provider = await connected({
+        "solana:signAllTransactions": {
+          signAllTransactions: vi.fn(async () => output),
+        },
+      });
+      await expect(
+        provider.signAllTransactions([
+          new Uint8Array([1]),
+          new Uint8Array([2]),
+        ]),
       ).rejects.toThrow(/malformed output/);
     });
   });

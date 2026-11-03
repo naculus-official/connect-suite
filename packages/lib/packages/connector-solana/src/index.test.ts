@@ -1197,4 +1197,93 @@ describe("SolanaConnector — Wallet Standard session sync", () => {
     ).rejects.toMatchObject({ code: "chain_mismatch" });
     expect(signAndSendTransaction).not.toHaveBeenCalled();
   });
+
+  it("roles from before a disconnect stay dead after reconnecting to the same account and chain", async () => {
+    const { wallet, signAndSendTransaction } = standardWallet();
+    connector.registerWallet(wallet);
+    const first = await connector.connect("wallet-standard-std");
+    const roles = connector.getRoles(first);
+
+    await connector.disconnect(first);
+    const second = await connector.connect("wallet-standard-std");
+    expect(second.id).not.toBe(first.id);
+    expect(connector.getRoles(second)?.identity).toEqual(roles?.identity);
+
+    await expect(
+      roles?.payer?.signAndSendTransaction(new Uint8Array([1])),
+    ).rejects.toMatchObject({ code: "session_expired" });
+    expect(signAndSendTransaction).not.toHaveBeenCalled();
+  });
+
+  it("signing methods refuse a session whose id is not the active one", async () => {
+    const { wallet, signMessage, signAndSendTransaction } = standardWallet();
+    const signTransaction = vi.fn(async () => [
+      { signedTransaction: new Uint8Array([1]) },
+    ]);
+    (wallet.features as Record<string, unknown>)["solana:signTransaction"] = {
+      signTransaction,
+    };
+    connector.registerWallet(wallet);
+    const session = await connector.connect("wallet-standard-std");
+    const other = structuredClone(session);
+    other.id = "solana-restored-elsewhere";
+    const tx = { transaction: { serialized: [1, 2, 3] } };
+
+    await expect(
+      connector.signMessage(other, { message: "hi" }),
+    ).rejects.toMatchObject({ code: "session_not_found" });
+    await expect(connector.signTransaction(other, tx)).rejects.toMatchObject({
+      code: "session_not_found",
+    });
+    await expect(connector.sendTransaction(other, tx)).rejects.toMatchObject({
+      code: "session_not_found",
+    });
+    expect(signMessage).not.toHaveBeenCalled();
+    expect(signTransaction).not.toHaveBeenCalled();
+    expect(signAndSendTransaction).not.toHaveBeenCalled();
+  });
+
+  it("ends the session before a wallet disconnect that never resolves", async () => {
+    const { wallet, signMessage, signAndSendTransaction } = standardWallet();
+    const walletDisconnect = vi.fn(() => new Promise<void>(() => {}));
+    (wallet.features as Record<string, unknown>)["standard:disconnect"] = {
+      disconnect: walletDisconnect,
+    };
+    connector.registerWallet(wallet);
+    const session = await connector.connect("wallet-standard-std");
+    const roles = connector.getRoles(session);
+
+    // Deliberately not awaited: the wallet never answers.
+    void connector.disconnect(session);
+    expect(walletDisconnect).toHaveBeenCalledTimes(1);
+
+    await expect(
+      roles?.payer?.signAndSendTransaction(new Uint8Array([1])),
+    ).rejects.toMatchObject({ code: "session_expired" });
+    await expect(
+      connector.signMessage(session, { message: "hi" }),
+    ).rejects.toMatchObject({ code: "session_expired" });
+    expect(signMessage).not.toHaveBeenCalled();
+    expect(signAndSendTransaction).not.toHaveBeenCalled();
+  });
+
+  it("tears down even when the wallet disconnect throws", async () => {
+    const { wallet, signAndSendTransaction } = standardWallet();
+    (wallet.features as Record<string, unknown>)["standard:disconnect"] = {
+      disconnect: vi.fn(async () => {
+        throw new Error("wallet refused");
+      }),
+    };
+    connector.registerWallet(wallet);
+    const session = await connector.connect("wallet-standard-std");
+    const roles = connector.getRoles(session);
+
+    await expect(connector.disconnect(session)).resolves.toBeUndefined();
+
+    expect(connector.getRoles(session)).toBeNull();
+    await expect(
+      roles?.payer?.signAndSendTransaction(new Uint8Array([1])),
+    ).rejects.toMatchObject({ code: "session_expired" });
+    expect(signAndSendTransaction).not.toHaveBeenCalled();
+  });
 });
