@@ -1,6 +1,6 @@
 import type { UniversalWalletSession } from "@naculus/connect-core";
 import { createEmptySession } from "@naculus/connect-core";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { DiscoveredWallet, Eip6963EthereumProvider } from "./index";
 import { EIP6963Connector } from "./index";
 
@@ -384,4 +384,87 @@ describe("EIP6963Connector.switchChain — active chain tracking", () => {
       }),
     ).resolves.not.toThrow();
   });
+});
+
+describe("EIP6963Connector.switchChain — lagging eth_chainId", () => {
+  let connector: EIP6963Connector;
+  let provider: ReturnType<typeof createMockProvider>;
+  let wallet: DiscoveredWallet;
+  let session: UniversalWalletSession;
+  let eipSession: ReturnType<typeof createMockEIP6963Session>;
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    connector = new EIP6963Connector();
+    provider = createMockProvider("0xaa36a7");
+    wallet = createMockDiscoveredWallet(provider);
+    session = createSession("11155111");
+    eipSession = createMockEIP6963Session(wallet);
+    eipSession.chains = ["eip155:11155111"];
+    (connector as any).activeSessions.set(wallet.id, eipSession);
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  /** Runs switchChain to completion while advancing the retry delays. */
+  async function settle(promise: Promise<void>): Promise<unknown> {
+    const outcome = promise.then(
+      () => undefined,
+      (error: unknown) => error,
+    );
+    await vi.runAllTimersAsync();
+    return outcome;
+  }
+
+  it("succeeds when eth_chainId reports the new chain on a later read", async () => {
+    // Wallet moved, but its cached chainId updates only on chainChanged.
+    provider.request
+      .mockResolvedValueOnce(null) // wallet_switchEthereumChain
+      .mockResolvedValueOnce("0xaa36a7") // first read: still the old chain
+      .mockResolvedValueOnce("0x14a34"); // second read: caught up
+
+    const error = await settle(connector.switchChain(session, "eip155:84532"));
+
+    expect(error).toBeUndefined();
+    expect(session.namespaces.eip155?.chains[0]).toBe("eip155:84532");
+    expect(eipSession.chains[0]).toBe("eip155:84532");
+    expect(provider.request).toHaveBeenCalledTimes(3);
+  });
+
+  it("fails closed when eth_chainId never reports the new chain", async () => {
+    provider.request
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce("0xaa36a7")
+      .mockResolvedValueOnce("0xaa36a7")
+      .mockResolvedValueOnce("0xaa36a7");
+
+    const error = await settle(connector.switchChain(session, "eip155:84532"));
+
+    expect(error).toMatchObject({
+      name: "WalletError",
+      code: "chain_mismatch",
+    });
+    expect(session.namespaces.eip155?.chains).toEqual(["eip155:11155111"]);
+    expect(eipSession.chains).toEqual(["eip155:11155111"]);
+  });
+
+  it.each([
+    ["uppercase hex", "0X14A34"],
+    ["mixed-case hex", "0x14A34"],
+    ["decimal string", "84532"],
+  ])(
+    "accepts a %s eth_chainId reply for the requested chain",
+    async (_label, reply) => {
+      provider.request.mockResolvedValueOnce(null).mockResolvedValueOnce(reply);
+
+      const error = await settle(
+        connector.switchChain(session, "eip155:84532"),
+      );
+
+      expect(error).toBeUndefined();
+      expect(session.namespaces.eip155?.chains[0]).toBe("eip155:84532");
+    },
+  );
 });

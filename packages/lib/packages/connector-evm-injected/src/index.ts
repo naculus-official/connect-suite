@@ -287,6 +287,32 @@ function isUnsupportedSendCallsError(error: unknown): boolean {
   );
 }
 
+/**
+ * switchChain reads eth_chainId back after the wallet replies. Some honest
+ * wallets update the value they report only when their chainChanged event
+ * fires, which can land after wallet_switchEthereumChain resolves, so one
+ * stale read is retried a bounded number of times before failing closed.
+ */
+const SWITCH_CHAIN_VERIFY_ATTEMPTS = 3;
+const SWITCH_CHAIN_VERIFY_DELAY_MS = 250;
+
+/** Decimal chain reference from an eth_chainId reply, or undefined. */
+function parseChainIdReply(value: unknown): string | undefined {
+  if (
+    (typeof value === "string" && value.trim().length > 0) ||
+    typeof value === "number"
+  ) {
+    try {
+      return BigInt(
+        typeof value === "string" ? value.trim().toLowerCase() : value,
+      ).toString();
+    } catch {
+      return undefined;
+    }
+  }
+  return undefined;
+}
+
 const SUPPORT: ConnectorSupport = {
   desktop: true,
   mobile: true,
@@ -1124,32 +1150,43 @@ class EIP6963ConnectorImpl implements UniversalConnector {
     // Phantom answered null and stayed on the old chain (Base Sepolia, and the
     // Sepolia -> Base Sepolia direction). Read the chain back and fail closed —
     // a provider that cannot answer eth_chainId gets the same error, so the
-    // session is never promoted to a chain the wallet may not be on.
+    // session is never promoted to a chain the wallet may not be on. A read
+    // that does not match yet is retried (see SWITCH_CHAIN_VERIFY_ATTEMPTS)
+    // for wallets whose eth_chainId lags behind their chainChanged event.
+    const expectedReference = normalizedChainId.slice("eip155:".length);
     let reportedChainId: unknown;
-    try {
-      reportedChainId = await eip6963Session.wallet.provider.request({
-        method: "eth_chainId",
-      });
-    } catch (error: unknown) {
-      throw new WalletError(
-        "chain_mismatch",
-        `Could not confirm chain switch to ${hexChainId}: eth_chainId failed.`,
-        undefined,
-        error,
-      );
-    }
-    let reportedReference: string | undefined;
-    if (
-      (typeof reportedChainId === "string" && reportedChainId.length > 0) ||
-      typeof reportedChainId === "number"
-    ) {
+    let readError: unknown;
+    let confirmed = false;
+    for (let attempt = 1; attempt <= SWITCH_CHAIN_VERIFY_ATTEMPTS; attempt++) {
+      if (attempt > 1) {
+        await new Promise<void>((resolve) =>
+          setTimeout(resolve, SWITCH_CHAIN_VERIFY_DELAY_MS),
+        );
+      }
       try {
-        reportedReference = BigInt(reportedChainId).toString();
-      } catch {
-        reportedReference = undefined;
+        reportedChainId = await eip6963Session.wallet.provider.request({
+          method: "eth_chainId",
+        });
+        readError = undefined;
+      } catch (error: unknown) {
+        reportedChainId = undefined;
+        readError = error;
+        continue;
+      }
+      if (parseChainIdReply(reportedChainId) === expectedReference) {
+        confirmed = true;
+        break;
       }
     }
-    if (reportedReference !== normalizedChainId.slice("eip155:".length)) {
+    if (!confirmed) {
+      if (readError !== undefined) {
+        throw new WalletError(
+          "chain_mismatch",
+          `Could not confirm chain switch to ${hexChainId}: eth_chainId failed.`,
+          undefined,
+          readError,
+        );
+      }
       throw new WalletError(
         "chain_mismatch",
         `Wallet did not switch to ${hexChainId}; it reports ${String(reportedChainId)}.`,
