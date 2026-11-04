@@ -15,6 +15,7 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 - **A user rejection with EIP-1193 code 4001 reads as "rejected" in `getUserFriendlyError`** (`@naculus/connect-appkit-react`) — a numeric 4001 on the error, its `cause` or `data.originalError` maps to the same message as a rejection text match.
 - **`useSignMessage` error `cause` carries only `code` and `message`** (`@naculus/connect-appkit-react`, `@naculus/connect-appkit-vue`) — the raw wallet payload is no longer attached to `error.cause`. `code` and `message` on the error are unchanged.
+- **`AppkitConnectButton` shows the WalletConnect QR code** (`@naculus/connect-appkit-react`) — inside a `Web3ConnectProvider`, "Scan QR with any wallet" now calls `startPairing()`, passes the `wc:` URI to the modal and waits on `completePairing()`; before, the modal stayed on "Waiting for connection..." with no QR code. Retry restarts pairing and cancel calls `cancelPairing()`. A consumer that sets `onAppkitStartPairing` (such as the ui package's `ConnectButton`) still runs the flow itself.
 
 ## 0.15.0 — 2026-10-26
 

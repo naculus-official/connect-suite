@@ -284,6 +284,7 @@ export type {
 export { useWeb3ErrorHandler } from "./hooks/useWeb3ErrorHandler";
 export type { Web3ConnectProviderProps } from "./provider/Web3ConnectProvider";
 export {
+  AppkitConnectButton,
   useWeb3,
   Web3ConnectProvider,
   Web3Context,
@@ -367,7 +368,6 @@ export {
   AppkitCardTitle,
   AppkitCheckbox,
   AppkitCollapsible,
-  AppkitConnectButton,
   AppkitDialog,
   AppkitDropdownMenu,
   AppkitInput,
