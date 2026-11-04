@@ -1,5 +1,11 @@
 "use client";
 
+import {
+  initialWeb3State,
+  web3Reducer,
+  withRetry,
+  withTimeout,
+} from "@naculus/connect-appkit-core";
 import type {
   ActiveSessionBundle,
   SessionManager,
@@ -16,21 +22,17 @@ import { eip6963Connector } from "@naculus/connector-evm-injected";
 import type React from "react";
 import {
   createContext,
+  forwardRef,
   useCallback,
   useContext,
   useEffect,
   useMemo,
   useReducer,
   useRef,
+  useState,
 } from "react";
 import { createClient, type Web3Client } from "../client";
 import { runSiwxFlow } from "../core/siwx-flow";
-import {
-  initialWeb3State,
-  web3Reducer,
-  withRetry,
-  withTimeout,
-} from "@naculus/connect-appkit-core";
 import type {
   WalletChain,
   Web3Actions,
@@ -38,6 +40,7 @@ import type {
   Web3State,
 } from "../types";
 import { getDefaultChains } from "../utils/chains";
+import { AppkitConnectButton as GeneratedAppkitConnectButton } from "../wc-generated/components";
 
 // ── Timeout Helper ────────────────────────────────────────────────
 
@@ -712,3 +715,134 @@ export function useWeb3(): Web3ContextValue {
   }
   return context;
 }
+
+// ── Connect button bound to this provider ─────────────────────────
+
+type GeneratedConnectButtonProps = React.ComponentProps<
+  typeof GeneratedAppkitConnectButton
+>;
+
+function pairingErrorMessage(err: unknown): string {
+  return err instanceof Error ? err.message : "Connection failed";
+}
+
+/**
+ * `<appkit-connect-button>` wired to the nearest `Web3ConnectProvider`.
+ *
+ * The web component only emits `appkitStartPairing`; it shows a QR code once
+ * its `qrUri` prop is set. When the consumer leaves `onAppkitStartPairing`
+ * unset and a provider is present, this wrapper runs the WalletConnect
+ * pairing itself: `startPairing()` feeds the `wc:` URI back to the modal and
+ * `completePairing()` waits for the wallet to approve. A consumer that passes
+ * `onAppkitStartPairing` (as the ui package's `ConnectButton` does) owns the
+ * flow and the wrapper passes everything through untouched.
+ */
+/**
+ * The plain EVM address the connect button shows, from the provider's
+ * accounts: the first `eip155:` CAIP-10 entry or bare 0x address, with any
+ * CAIP-10 prefix dropped. Empty when no EVM account is connected.
+ */
+function plainEvmAddress(accounts: readonly string[]): string {
+  const evm = accounts.find(
+    (a) => a.startsWith("eip155:") || /^0x[0-9a-fA-F]{40}$/.test(a),
+  );
+  if (!evm) return "";
+  return evm.split(":").pop() ?? "";
+}
+
+const WiredAppkitConnectButton = forwardRef<
+  unknown,
+  GeneratedConnectButtonProps
+>(function AppkitConnectButton(props, ref) {
+  const ctx = useContext(Web3Context);
+  const [qrUri, setQrUri] = useState<string | null>(null);
+  const [qrError, setQrError] = useState<string | null>(null);
+  const attemptRef = useRef({ aborted: false });
+  const forwardedRef = ref as GeneratedConnectButtonProps["ref"];
+
+  const startPairingFlow = useCallback(() => {
+    if (!ctx) return;
+    attemptRef.current.aborted = true;
+    const attempt = { aborted: false };
+    attemptRef.current = attempt;
+    setQrUri(null);
+    setQrError(null);
+    ctx
+      .startPairing()
+      .then((uri) => {
+        if (attempt.aborted) return;
+        setQrUri(uri);
+        return ctx.completePairing().then(() => {
+          if (!attempt.aborted) setQrUri(null);
+        });
+      })
+      .catch((err: unknown) => {
+        if (attempt.aborted) return;
+        setQrUri(null);
+        setQrError(pairingErrorMessage(err));
+      });
+  }, [ctx]);
+
+  // Close the QR view once the provider holds a connected session, whatever
+  // path got it there, as the ui package's ConnectButtonAdapter does.
+  const isConnected = ctx?.isConnected ?? false;
+  useEffect(() => {
+    if (isConnected) setQrUri(null);
+  }, [isConnected]);
+
+  const cancelPairingFlow = useCallback(() => {
+    attemptRef.current.aborted = true;
+    ctx?.cancelPairing?.();
+    setQrUri(null);
+    setQrError(null);
+  }, [ctx]);
+
+  if (!ctx) {
+    return <GeneratedAppkitConnectButton {...props} ref={forwardedRef} />;
+  }
+
+  // The element decides its connected view from `connected` and `address`;
+  // fill them from the provider unless the consumer set them.
+  const accountProps = {
+    connected: props.connected ?? ctx.isConnected,
+    address: props.address ?? plainEvmAddress(ctx.accounts),
+    onAppkitDisconnect:
+      props.onAppkitDisconnect ??
+      (() => {
+        void ctx.disconnect();
+      }),
+  };
+
+  if (props.onAppkitStartPairing !== undefined) {
+    return (
+      <GeneratedAppkitConnectButton
+        {...props}
+        {...accountProps}
+        ref={forwardedRef}
+      />
+    );
+  }
+
+  const { onAppkitRetry, onAppkitCancelPairing } = props;
+  return (
+    <GeneratedAppkitConnectButton
+      {...props}
+      {...accountProps}
+      ref={forwardedRef}
+      qrUri={props.qrUri ?? qrUri}
+      qrError={props.qrError ?? qrError}
+      onAppkitStartPairing={() => startPairingFlow()}
+      onAppkitRetry={(event) => {
+        onAppkitRetry?.(event);
+        startPairingFlow();
+      }}
+      onAppkitCancelPairing={(event) => {
+        onAppkitCancelPairing?.(event);
+        cancelPairingFlow();
+      }}
+    />
+  );
+});
+
+export const AppkitConnectButton =
+  WiredAppkitConnectButton as unknown as typeof GeneratedAppkitConnectButton;

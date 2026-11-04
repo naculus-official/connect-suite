@@ -986,3 +986,381 @@ describe("SolanaConnector — Wallet Standard discovery", () => {
     });
   });
 });
+
+/**
+ * A Wallet Standard wallet connected through the connector: account switches
+ * arrive as a `standard:events` "change", and the chain used for
+ * sign-and-send is the one switchChain set.
+ */
+describe("SolanaConnector — Wallet Standard session sync", () => {
+  const FIRST = {
+    address: "7EcDhSYGxXyscszYEp35KHN8vvw3svAuLKTzXwCFLtPb",
+    publicKey: new Uint8Array(32).fill(1),
+  };
+  const SECOND = {
+    address: "9WzDXwBbmkg8ZTbNMqUxvQRAyrZzDsGYdLVL9zYtAWWM",
+    publicKey: new Uint8Array(32).fill(2),
+  };
+  const DEVNET = "solana:EtWTRABZaYq6iMfeYKouRu166VU2xqa1";
+
+  let connector: SolanaConnector;
+
+  function standardWallet() {
+    const listeners: Record<string, ((p: unknown) => void)[]> = {};
+    const signMessage = vi.fn(async () => [
+      { signedMessage: new Uint8Array([1]), signature: new Uint8Array(64) },
+    ]);
+    const signAndSendTransaction = vi.fn(async () => [
+      { signature: new Uint8Array(64) },
+    ]);
+    const wallet = {
+      name: "Std",
+      icon: "",
+      version: "1.0.0",
+      accounts: [FIRST] as { address: string; publicKey: Uint8Array }[],
+      features: {
+        "standard:connect": {
+          connect: vi.fn(async () => ({ accounts: [FIRST] })),
+        },
+        "standard:events": {
+          on: (event: string, fn: (p: unknown) => void) => {
+            const list = listeners[event] ?? [];
+            list.push(fn);
+            listeners[event] = list;
+            return () => {
+              listeners[event] = (listeners[event] ?? []).filter(
+                (f) => f !== fn,
+              );
+            };
+          },
+        },
+        "solana:signMessage": { signMessage },
+        "solana:signAndSendTransaction": { signAndSendTransaction },
+      },
+    };
+    const emit = (event: string, payload: unknown) => {
+      for (const fn of listeners[event] ?? []) fn(payload);
+    };
+    return { wallet, emit, signMessage, signAndSendTransaction };
+  }
+
+  beforeEach(() => {
+    connector = createSolanaConnector();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: vi
+          .fn()
+          .mockResolvedValue({ result: "5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp" }),
+      }),
+    );
+  });
+
+  afterEach(() => {
+    connector.clear();
+    vi.unstubAllGlobals();
+  });
+
+  it("follows a Wallet Standard change event to the new account", async () => {
+    const { wallet, emit, signMessage } = standardWallet();
+    connector.registerWallet(wallet);
+    const session = await connector.connect("wallet-standard-std");
+    const seen: string[][] = [];
+    connector.onAccountsChanged(session, (a) => seen.push(a));
+
+    wallet.accounts = [SECOND];
+    emit("change", { accounts: [SECOND] });
+
+    expect(session.namespaces.solana?.accounts[0]).toContain(SECOND.address);
+    expect(seen).toHaveLength(1);
+    await connector.signMessage(session, { message: "hi" });
+    expect(
+      (signMessage.mock.calls[0] as unknown[])[0] as { account: unknown },
+    ).toHaveProperty("account", SECOND);
+  });
+
+  it("ignores a change event without accounts", async () => {
+    const { wallet, emit } = standardWallet();
+    connector.registerWallet(wallet);
+    const session = await connector.connect("wallet-standard-std");
+    emit("change", { chains: ["solana:devnet"] });
+    expect(session.namespaces.solana?.accounts[0]).toContain(FIRST.address);
+  });
+
+  it("signs and sends on the chain switchChain set, even on a session copy", async () => {
+    const { wallet, signAndSendTransaction } = standardWallet();
+    connector.registerWallet(wallet);
+    const session = await connector.connect("wallet-standard-std");
+    const copy = structuredClone(session);
+
+    await connector.switchChain(copy, DEVNET);
+    await connector.sendTransaction(copy, {
+      transaction: { serialized: [1, 2, 3] },
+    });
+
+    expect(
+      (signAndSendTransaction.mock.calls[0] as unknown[])[0] as {
+        chain: unknown;
+      },
+    ).toHaveProperty("chain", "solana:devnet");
+  });
+
+  it("a held wallet provider cannot sign after disconnect", async () => {
+    const { wallet, signMessage, signAndSendTransaction } = standardWallet();
+    connector.registerWallet(wallet);
+    const session = await connector.connect("wallet-standard-std");
+    const provider = connector
+      .getDiscoveredWallets()
+      .find((w) => w.id === "wallet-standard-std")?.provider;
+    expect(provider).toBeDefined();
+
+    await connector.disconnect(session);
+
+    await expect(provider?.signMessage(new Uint8Array([1]))).rejects.toThrow();
+    await expect(
+      provider?.signAndSendTransaction(new Uint8Array([1])),
+    ).rejects.toThrow();
+    expect(signMessage).not.toHaveBeenCalled();
+    expect(signAndSendTransaction).not.toHaveBeenCalled();
+  });
+
+  it("switchChain refuses a session whose id is not the active one", async () => {
+    const { wallet, signAndSendTransaction } = standardWallet();
+    connector.registerWallet(wallet);
+    const session = await connector.connect("wallet-standard-std");
+    const other = structuredClone(session);
+    other.id = "solana-restored-elsewhere";
+
+    await expect(connector.switchChain(other, DEVNET)).rejects.toMatchObject({
+      code: "session_not_found",
+    });
+    expect(other.namespaces.solana?.chains).toEqual([
+      session.namespaces.solana?.chains[0],
+    ]);
+
+    await connector.sendTransaction(session, {
+      transaction: { serialized: [1, 2, 3] },
+    });
+    expect(
+      (signAndSendTransaction.mock.calls[0] as unknown[])[0] as {
+        chain: unknown;
+      },
+    ).toHaveProperty("chain", "solana:mainnet");
+  });
+
+  it("switchChain rewrites the CAIP-10 account prefix on the copy and the live session", async () => {
+    const { wallet } = standardWallet();
+    connector.registerWallet(wallet);
+    const session = await connector.connect("wallet-standard-std");
+    const copy = structuredClone(session);
+
+    await connector.switchChain(copy, DEVNET);
+
+    expect(copy.namespaces.solana?.chains).toEqual([DEVNET]);
+    expect(copy.namespaces.solana?.accounts).toEqual([
+      `${DEVNET}:${FIRST.address}`,
+    ]);
+    expect(session.namespaces.solana?.chains).toEqual([DEVNET]);
+    expect(session.namespaces.solana?.accounts).toEqual([
+      `${DEVNET}:${FIRST.address}`,
+    ]);
+  });
+
+  it("roles from before an account switch refuse to sign", async () => {
+    const { wallet, emit, signAndSendTransaction } = standardWallet();
+    connector.registerWallet(wallet);
+    const session = await connector.connect("wallet-standard-std");
+    const roles = connector.getRoles(session);
+    expect(roles?.payer?.address).toBe(FIRST.address);
+
+    wallet.accounts = [SECOND];
+    emit("change", { accounts: [SECOND] });
+
+    await expect(
+      roles?.payer?.signAndSendTransaction(new Uint8Array([1])),
+    ).rejects.toThrow(/account changed/);
+    expect(signAndSendTransaction).not.toHaveBeenCalled();
+  });
+
+  it("roles from before a chain switch refuse to sign", async () => {
+    const { wallet, signAndSendTransaction } = standardWallet();
+    connector.registerWallet(wallet);
+    const session = await connector.connect("wallet-standard-std");
+    const roles = connector.getRoles(session);
+
+    await connector.switchChain(session, DEVNET);
+
+    await expect(
+      roles?.payer?.signAndSendTransaction(new Uint8Array([1])),
+    ).rejects.toMatchObject({ code: "chain_mismatch" });
+    expect(signAndSendTransaction).not.toHaveBeenCalled();
+  });
+
+  it("roles from before a disconnect stay dead after reconnecting to the same account and chain", async () => {
+    const { wallet, signAndSendTransaction } = standardWallet();
+    connector.registerWallet(wallet);
+    const first = await connector.connect("wallet-standard-std");
+    const roles = connector.getRoles(first);
+
+    await connector.disconnect(first);
+    const second = await connector.connect("wallet-standard-std");
+    expect(second.id).not.toBe(first.id);
+    expect(connector.getRoles(second)?.identity).toEqual(roles?.identity);
+
+    await expect(
+      roles?.payer?.signAndSendTransaction(new Uint8Array([1])),
+    ).rejects.toMatchObject({ code: "session_expired" });
+    expect(signAndSendTransaction).not.toHaveBeenCalled();
+  });
+
+  it("getRoles refuses a session from before a disconnect and reconnect", async () => {
+    const { wallet } = standardWallet();
+    connector.registerWallet(wallet);
+    const first = await connector.connect("wallet-standard-std");
+    await connector.disconnect(first);
+    const second = await connector.connect("wallet-standard-std");
+    expect(second.id).not.toBe(first.id);
+
+    // S1 must not obtain a live signer bound to S2.
+    expect(connector.getRoles(first)).toBeNull();
+  });
+
+  it("getRoles refuses a missing session while one is active", async () => {
+    const { wallet } = standardWallet();
+    connector.registerWallet(wallet);
+    const session = await connector.connect("wallet-standard-std");
+    expect(connector.getRoles(session)).not.toBeNull();
+
+    expect(connector.getRoles(null as never)).toBeNull();
+    expect(connector.getRoles(undefined as never)).toBeNull();
+  });
+
+  it("roles expose a batch sign for a wallet that registers only solana:signTransaction", async () => {
+    const { wallet } = standardWallet();
+    const signTransaction = vi.fn(async () => [
+      { signedTransaction: new Uint8Array([8]) },
+      { signedTransaction: new Uint8Array([9]) },
+    ]);
+    (wallet.features as Record<string, unknown>)["solana:signTransaction"] = {
+      signTransaction,
+    };
+    connector.registerWallet(wallet);
+    const session = await connector.connect("wallet-standard-std");
+    const roles = connector.getRoles(session);
+    const signAll = roles?.signer?.signAllTransactions;
+    expect(signAll).toBeTypeOf("function");
+
+    const txs = [new Uint8Array([1]), new Uint8Array([2])];
+    await expect(signAll?.(txs)).resolves.toEqual([
+      new Uint8Array([8]),
+      new Uint8Array([9]),
+    ]);
+    expect(signTransaction).toHaveBeenCalledTimes(1);
+    const inputs = signTransaction.mock.calls[0] as unknown as {
+      account: { address: string };
+      transaction: Uint8Array;
+    }[];
+    expect(inputs).toHaveLength(2);
+    expect(inputs.map((i) => i.account.address)).toEqual([
+      FIRST.address,
+      FIRST.address,
+    ]);
+    expect(inputs.map((i) => i.transaction)).toEqual(txs);
+
+    // Through the session guard: dead once the session ends.
+    await connector.disconnect(session);
+    await expect(signAll?.(txs)).rejects.toMatchObject({
+      code: "session_expired",
+    });
+    expect(signTransaction).toHaveBeenCalledTimes(1);
+  });
+
+  it("getRoles still serves the current session after a reconnect", async () => {
+    const { wallet, signAndSendTransaction } = standardWallet();
+    connector.registerWallet(wallet);
+    const first = await connector.connect("wallet-standard-std");
+    await connector.disconnect(first);
+    const second = await connector.connect("wallet-standard-std");
+
+    const roles = connector.getRoles(second);
+    expect(roles?.payer?.address).toBe(FIRST.address);
+    await expect(
+      roles?.payer?.signAndSendTransaction(new Uint8Array([1])),
+    ).resolves.toBeDefined();
+    expect(signAndSendTransaction).toHaveBeenCalledTimes(1);
+  });
+
+  it("signing methods refuse a session whose id is not the active one", async () => {
+    const { wallet, signMessage, signAndSendTransaction } = standardWallet();
+    const signTransaction = vi.fn(async () => [
+      { signedTransaction: new Uint8Array([1]) },
+    ]);
+    (wallet.features as Record<string, unknown>)["solana:signTransaction"] = {
+      signTransaction,
+    };
+    connector.registerWallet(wallet);
+    const session = await connector.connect("wallet-standard-std");
+    const other = structuredClone(session);
+    other.id = "solana-restored-elsewhere";
+    const tx = { transaction: { serialized: [1, 2, 3] } };
+
+    await expect(
+      connector.signMessage(other, { message: "hi" }),
+    ).rejects.toMatchObject({ code: "session_not_found" });
+    await expect(connector.signTransaction(other, tx)).rejects.toMatchObject({
+      code: "session_not_found",
+    });
+    await expect(connector.sendTransaction(other, tx)).rejects.toMatchObject({
+      code: "session_not_found",
+    });
+    expect(signMessage).not.toHaveBeenCalled();
+    expect(signTransaction).not.toHaveBeenCalled();
+    expect(signAndSendTransaction).not.toHaveBeenCalled();
+  });
+
+  it("ends the session before a wallet disconnect that never resolves", async () => {
+    const { wallet, signMessage, signAndSendTransaction } = standardWallet();
+    const walletDisconnect = vi.fn(() => new Promise<void>(() => {}));
+    (wallet.features as Record<string, unknown>)["standard:disconnect"] = {
+      disconnect: walletDisconnect,
+    };
+    connector.registerWallet(wallet);
+    const session = await connector.connect("wallet-standard-std");
+    const roles = connector.getRoles(session);
+
+    // Deliberately not awaited: the wallet never answers.
+    void connector.disconnect(session);
+    expect(walletDisconnect).toHaveBeenCalledTimes(1);
+
+    await expect(
+      roles?.payer?.signAndSendTransaction(new Uint8Array([1])),
+    ).rejects.toMatchObject({ code: "session_expired" });
+    await expect(
+      connector.signMessage(session, { message: "hi" }),
+    ).rejects.toMatchObject({ code: "session_expired" });
+    expect(signMessage).not.toHaveBeenCalled();
+    expect(signAndSendTransaction).not.toHaveBeenCalled();
+  });
+
+  it("tears down even when the wallet disconnect throws", async () => {
+    const { wallet, signAndSendTransaction } = standardWallet();
+    (wallet.features as Record<string, unknown>)["standard:disconnect"] = {
+      disconnect: vi.fn(async () => {
+        throw new Error("wallet refused");
+      }),
+    };
+    connector.registerWallet(wallet);
+    const session = await connector.connect("wallet-standard-std");
+    const roles = connector.getRoles(session);
+
+    await expect(connector.disconnect(session)).resolves.toBeUndefined();
+
+    expect(connector.getRoles(session)).toBeNull();
+    await expect(
+      roles?.payer?.signAndSendTransaction(new Uint8Array([1])),
+    ).rejects.toMatchObject({ code: "session_expired" });
+    expect(signAndSendTransaction).not.toHaveBeenCalled();
+  });
+});

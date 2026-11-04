@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
-  UNKNOWN_ERROR_DESCRIPTION,
-  UNKNOWN_ERROR_TITLE,
   getUserFriendlyError,
   isRetryableError,
+  UNKNOWN_ERROR_DESCRIPTION,
+  UNKNOWN_ERROR_TITLE,
 } from "./errorMessages";
 
 /**
@@ -38,9 +38,9 @@ describe("getUserFriendlyError — WalletError codes", () => {
 
 describe("getUserFriendlyError — message patterns", () => {
   it("classifies a rejection", () => {
-    expect(getUserFriendlyError(new Error("User rejected the request")).code).toBe(
-      "user_rejected",
-    );
+    expect(
+      getUserFriendlyError(new Error("User rejected the request")).code,
+    ).toBe("user_rejected");
   });
 
   it("classifies a timeout", () => {
@@ -72,6 +72,38 @@ describe("getUserFriendlyError — message patterns", () => {
   });
 });
 
+describe("getUserFriendlyError — EIP-1193 code 4001", () => {
+  it("maps a numeric 4001 on the error to user_rejected", () => {
+    const err = Object.assign(new Error("Something odd"), { code: 4001 });
+    const r = getUserFriendlyError(err);
+    expect(r.code).toBe("user_rejected");
+    expect(r.title).toBe("Request Rejected");
+    expect(r.description).toBe("The request was declined.");
+  });
+
+  it("maps a 4001 on a plain object without an Error instance", () => {
+    expect(getUserFriendlyError({ code: 4001, message: "x" }).code).toBe(
+      "user_rejected",
+    );
+  });
+
+  it("maps a 4001 wrapped in data.originalError", () => {
+    const err = { code: -32603, data: { originalError: { code: 4001 } } };
+    expect(getUserFriendlyError(err).code).toBe("user_rejected");
+  });
+
+  it("maps a 4001 on the cause", () => {
+    const err = new Error("wrapped", { cause: { code: 4001 } });
+    expect(getUserFriendlyError(err).code).toBe("user_rejected");
+  });
+
+  it("does not map other numeric codes to user_rejected", () => {
+    expect(
+      getUserFriendlyError({ code: -32603, message: "internal" }).code,
+    ).toBeUndefined();
+  });
+});
+
 describe("getUserFriendlyError — non-Error inputs", () => {
   it.each([null, undefined])("handles %p", (input) => {
     const r = getUserFriendlyError(input);
@@ -99,12 +131,14 @@ describe("getUserFriendlyError — non-Error inputs", () => {
 });
 
 describe("isRetryableError", () => {
-  it.each(["deeplink_timeout", "session_expired", "intent_expired", "tx_failed"])(
-    "reports %s as retryable",
-    (code) => {
-      expect(isRetryableError(walletError(code))).toBe(true);
-    },
-  );
+  it.each([
+    "deeplink_timeout",
+    "session_expired",
+    "intent_expired",
+    "tx_failed",
+  ])("reports %s as retryable", (code) => {
+    expect(isRetryableError(walletError(code))).toBe(true);
+  });
 
   it("reports a permanent failure as not retryable", () => {
     expect(isRetryableError(walletError("user_rejected"))).toBe(false);

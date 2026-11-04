@@ -27,7 +27,8 @@ export const WALLET_ERROR_TITLES: Record<string, string> = {
 export const WALLET_ERROR_DESCRIPTIONS: Record<string, string> = {
   wallet_unavailable:
     "No wallet found. Please install a compatible wallet (e.g., MetaMask, WalletConnect) and try again.",
-  user_rejected: "The connection request was declined in your wallet. You can try again whenever you're ready.",
+  user_rejected:
+    "The connection request was declined in your wallet. You can try again whenever you're ready.",
   deeplink_timeout:
     "The wallet didn't respond in time. This can happen if the wallet app isn't installed or takes too long to open.",
   session_expired:
@@ -59,21 +60,43 @@ export const UNKNOWN_ERROR_DESCRIPTION =
 /**
  * Get a user-friendly error message object from any error.
  */
-export function getUserFriendlyError(
-  error: unknown
-): { title: string; description: string; code?: string } {
+export function getUserFriendlyError(error: unknown): {
+  title: string;
+  description: string;
+  code?: string;
+} {
   if (!error) {
-    return { title: UNKNOWN_ERROR_TITLE, description: UNKNOWN_ERROR_DESCRIPTION };
+    return {
+      title: UNKNOWN_ERROR_TITLE,
+      description: UNKNOWN_ERROR_DESCRIPTION,
+    };
   }
 
   // Check for WalletError with code
-  const maybeWalletError = error as { name?: string; code?: string; message?: string };
+  const maybeWalletError = error as {
+    name?: string;
+    code?: string;
+    message?: string;
+  };
   if (maybeWalletError.name === "WalletError" && maybeWalletError.code) {
     const code = maybeWalletError.code;
     const title = WALLET_ERROR_TITLES[code] ?? UNKNOWN_ERROR_TITLE;
     const description =
-      WALLET_ERROR_DESCRIPTIONS[code] ?? maybeWalletError.message ?? UNKNOWN_ERROR_DESCRIPTION;
+      WALLET_ERROR_DESCRIPTIONS[code] ??
+      maybeWalletError.message ??
+      UNKNOWN_ERROR_DESCRIPTION;
     return { title, description, code };
+  }
+
+  // EIP-1193 user rejection (4001) carried as a numeric code, possibly on the
+  // error's cause or a wrapped data.originalError. Same user-facing copy as the
+  // message-text match below.
+  if (hasEip1193RejectionCode(error)) {
+    return {
+      title: "Request Rejected",
+      description: "The request was declined.",
+      code: "user_rejected",
+    };
   }
 
   // Check for standard Error
@@ -100,7 +123,8 @@ export function getUserFriendlyError(
     if (/insufficient funds/i.test(message)) {
       return {
         title: "Insufficient Funds",
-        description: "You don't have enough funds to complete this transaction.",
+        description:
+          "You don't have enough funds to complete this transaction.",
         code: "tx_failed",
       };
     }
@@ -127,6 +151,24 @@ export function getUserFriendlyError(
   }
 
   return { title: UNKNOWN_ERROR_TITLE, description: UNKNOWN_ERROR_DESCRIPTION };
+}
+
+/**
+ * True when the error, its cause, or its data.originalError carries the
+ * EIP-1193 user-rejection code 4001.
+ */
+function hasEip1193RejectionCode(error: unknown, depth = 0): boolean {
+  if (!error || typeof error !== "object" || depth > 2) return false;
+  const maybe = error as {
+    code?: unknown;
+    cause?: unknown;
+    data?: { originalError?: unknown };
+  };
+  if (maybe.code === 4001) return true;
+  return (
+    hasEip1193RejectionCode(maybe.cause, depth + 1) ||
+    hasEip1193RejectionCode(maybe.data?.originalError, depth + 1)
+  );
 }
 
 /**

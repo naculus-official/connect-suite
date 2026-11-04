@@ -1,8 +1,8 @@
 /// @vitest-environment jsdom
 
-import { describe, it, expect, vi, beforeEach } from "vitest";
-import { renderHook, act } from "@testing-library/react";
+import { act, render, renderHook } from "@testing-library/react";
 import type React from "react";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 // ── Hoisted mocks ──────────────────────────────────────────────────
 
@@ -91,7 +91,22 @@ vi.mock("../utils/chains", () => ({
   getDefaultChains: vi.fn(() => []),
 }));
 
-import { Web3ConnectProvider, useWeb3 } from "./Web3ConnectProvider";
+// Stand-in for the Stencil wrapper: records the props the modal receives.
+const { lastConnectButtonProps } = vi.hoisted(() => ({
+  lastConnectButtonProps: { current: {} as Record<string, any> },
+}));
+vi.mock("../wc-generated/components", () => ({
+  AppkitConnectButton: (props: Record<string, any>) => {
+    lastConnectButtonProps.current = props;
+    return null;
+  },
+}));
+
+import {
+  AppkitConnectButton,
+  useWeb3,
+  Web3ConnectProvider,
+} from "./Web3ConnectProvider";
 
 // ── Fixtures ───────────────────────────────────────────────────────
 
@@ -99,7 +114,7 @@ const mockSession = {
   id: "test-session",
   walletType: "eip155",
   namespaces: {
-    "eip155": {
+    eip155: {
       chains: ["eip155:1"],
       accounts: ["eip155:1:0x1234567890abcdef1234567890abcdef12345678"],
     },
@@ -107,15 +122,17 @@ const mockSession = {
 };
 
 const siwxConfig = {
-  createMessage: vi.fn().mockResolvedValue(
-    "localhost wants you to sign in with your Ethereum account:\n" +
-      "0x1234567890abcdef1234567890abcdef12345678\n\n" +
-      "URI: https://test.com\n" +
-      "Version: 1\n" +
-      "Chain ID: eip155:1\n" +
-      "Nonce: testnonce123\n" +
-      "Issued At: 2026-08-26T00:00:00.000Z",
-  ),
+  createMessage: vi
+    .fn()
+    .mockResolvedValue(
+      "localhost wants you to sign in with your Ethereum account:\n" +
+        "0x1234567890abcdef1234567890abcdef12345678\n\n" +
+        "URI: https://test.com\n" +
+        "Version: 1\n" +
+        "Chain ID: eip155:1\n" +
+        "Nonce: testnonce123\n" +
+        "Issued At: 2026-08-26T00:00:00.000Z",
+    ),
   handleSignComplete: vi.fn().mockResolvedValue(undefined),
   required: true,
 };
@@ -132,7 +149,10 @@ const baseConfig = {
 
 function renderWithProvider(config: Record<string, unknown> = {}) {
   const wrapper = ({ children }: { children: React.ReactNode }) => (
-    <Web3ConnectProvider config={{ ...baseConfig, ...config } as any} autoConnect={false}>
+    <Web3ConnectProvider
+      config={{ ...baseConfig, ...config } as any}
+      autoConnect={false}
+    >
       {children}
     </Web3ConnectProvider>
   );
@@ -224,7 +244,9 @@ describe("Web3ConnectProvider — connector routing", () => {
       walletType: "embedded",
       connectorId: "pocket",
     };
-    const embeddedConnector = { switchChain: vi.fn().mockResolvedValue(undefined) };
+    const embeddedConnector = {
+      switchChain: vi.fn().mockResolvedValue(undefined),
+    };
     (mockClient as any).embeddedConnector = embeddedConnector;
     mockClient.connectEmbedded.mockResolvedValue(embeddedSession);
     const { result } = renderWithProvider({ enableEmbedded: true });
@@ -327,7 +349,9 @@ describe("Web3ConnectProvider — SIWx on reconnect", () => {
   // A check that throws has not established a session. Assuming one would be
   // the exact failure this change exists to remove.
   it("asks for a signature when the session check throws", async () => {
-    const hasValidSession = vi.fn().mockRejectedValue(new Error("storage gone"));
+    const hasValidSession = vi
+      .fn()
+      .mockRejectedValue(new Error("storage gone"));
     await connectThenReconnect({ siwx: { ...siwxConfig, hasValidSession } });
     expect(siwxConfig.createMessage).toHaveBeenCalled();
   });
@@ -346,5 +370,140 @@ describe("Web3ConnectProvider — SIWx on reconnect", () => {
     const result = await connectThenReconnect({});
     expect(siwxConfig.createMessage).not.toHaveBeenCalled();
     expect(result.current.status).toBe("connected");
+  });
+});
+
+describe("AppkitConnectButton", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    lastConnectButtonProps.current = {};
+  });
+
+  it("starts pairing on appkitStartPairing and hands the wc: URI to the modal", async () => {
+    const uri = "wc:abc@2?relay-protocol=irn&symKey=def";
+    mockClient.startPairing.mockResolvedValue(uri);
+    mockClient.completePairing.mockReturnValue(new Promise(() => {}));
+
+    render(
+      <Web3ConnectProvider config={baseConfig as any} autoConnect={false}>
+        <AppkitConnectButton />
+      </Web3ConnectProvider>,
+    );
+    expect(lastConnectButtonProps.current.qrUri).toBeNull();
+
+    await act(async () => {
+      lastConnectButtonProps.current.onAppkitStartPairing();
+    });
+
+    expect(mockClient.startPairing).toHaveBeenCalledTimes(1);
+    expect(mockClient.completePairing).toHaveBeenCalledTimes(1);
+    expect(lastConnectButtonProps.current.qrUri).toBe(uri);
+  });
+
+  it("passes the error to the modal and drops the URI when pairing fails", async () => {
+    mockClient.startPairing.mockResolvedValue("wc:abc@2?symKey=def");
+    mockClient.completePairing.mockRejectedValue(new Error("relay down"));
+
+    render(
+      <Web3ConnectProvider config={baseConfig as any} autoConnect={false}>
+        <AppkitConnectButton />
+      </Web3ConnectProvider>,
+    );
+    await act(async () => {
+      lastConnectButtonProps.current.onAppkitStartPairing();
+    });
+
+    expect(lastConnectButtonProps.current.qrError).toBe("relay down");
+    expect(lastConnectButtonProps.current.qrUri).toBeNull();
+  });
+
+  it("clears the URI once the provider reports a connected session", async () => {
+    mockClient.startPairing.mockResolvedValue("wc:abc@2?symKey=def");
+    mockClient.completePairing.mockReturnValue(new Promise(() => {}));
+
+    render(
+      <Web3ConnectProvider config={baseConfig as any} autoConnect={false}>
+        <AppkitConnectButton />
+      </Web3ConnectProvider>,
+    );
+    await act(async () => {
+      lastConnectButtonProps.current.onAppkitStartPairing();
+    });
+    expect(lastConnectButtonProps.current.qrUri).toBe("wc:abc@2?symKey=def");
+
+    const onConnected = mockSessionManager.on.mock.calls.find(
+      ([event]) => event === "sessionConnected",
+    )?.[1];
+    await act(async () => {
+      onConnected({
+        bundle: { walletSession: mockSession, activeChainId: "eip155:1" },
+      });
+    });
+
+    expect(lastConnectButtonProps.current.qrUri).toBeNull();
+  });
+
+  async function connectThroughSessionManager() {
+    const onConnected = mockSessionManager.on.mock.calls.find(
+      ([event]) => event === "sessionConnected",
+    )?.[1];
+    await act(async () => {
+      onConnected({
+        bundle: { walletSession: mockSession, activeChainId: "eip155:1" },
+      });
+    });
+  }
+
+  it("passes the provider's connected state and plain address to the element", async () => {
+    render(
+      <Web3ConnectProvider config={baseConfig as any} autoConnect={false}>
+        <AppkitConnectButton />
+      </Web3ConnectProvider>,
+    );
+    expect(lastConnectButtonProps.current.connected).toBe(false);
+    expect(lastConnectButtonProps.current.address).toBe("");
+
+    await connectThroughSessionManager();
+
+    expect(lastConnectButtonProps.current.connected).toBe(true);
+    expect(lastConnectButtonProps.current.address).toBe(
+      "0x1234567890abcdef1234567890abcdef12345678",
+    );
+  });
+
+  it("keeps a consumer-supplied connected prop", async () => {
+    render(
+      <Web3ConnectProvider config={baseConfig as any} autoConnect={false}>
+        <AppkitConnectButton connected={false} />
+      </Web3ConnectProvider>,
+    );
+    await connectThroughSessionManager();
+    expect(lastConnectButtonProps.current.connected).toBe(false);
+  });
+
+  it("disconnects through the provider when no consumer handler is given", async () => {
+    render(
+      <Web3ConnectProvider config={baseConfig as any} autoConnect={false}>
+        <AppkitConnectButton />
+      </Web3ConnectProvider>,
+    );
+    await connectThroughSessionManager();
+    await act(async () => {
+      lastConnectButtonProps.current.onAppkitDisconnect();
+    });
+    expect(mockClient.disconnect).toHaveBeenCalledTimes(1);
+    expect(lastConnectButtonProps.current.connected).toBe(false);
+  });
+
+  it("leaves the flow to a consumer that handles appkitStartPairing", () => {
+    const onAppkitStartPairing = vi.fn();
+    render(
+      <Web3ConnectProvider config={baseConfig as any} autoConnect={false}>
+        <AppkitConnectButton onAppkitStartPairing={onAppkitStartPairing} />
+      </Web3ConnectProvider>,
+    );
+    lastConnectButtonProps.current.onAppkitStartPairing();
+    expect(onAppkitStartPairing).toHaveBeenCalledTimes(1);
+    expect(mockClient.startPairing).not.toHaveBeenCalled();
   });
 });

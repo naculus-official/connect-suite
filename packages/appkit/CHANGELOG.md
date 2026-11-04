@@ -11,6 +11,14 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 - **`RedemptionRpc.latestBlock` passes chain time for period-limited eip7702 redemptions** (`@naculus/connect-appkit-core`). For a scope with `periodLimits`, the delegation-framework adapter reads the latest block and the flow passes `chainTime { timestamp, inclusionMarginSeconds: 60 }` to `signTransactionDelegationRedemption`. The method is optional, but without it, or if the block has no usable timestamp, a period-limited redemption is refused with `invalid_input` before signing or broadcast. Redemptions without period limits do not read the block.
 
+### Fixed
+
+- **A user rejection with EIP-1193 code 4001 reads as "rejected" in `getUserFriendlyError`** (`@naculus/connect-appkit-react`) — a numeric 4001 on the error, its `cause` or `data.originalError` maps to the same message as a rejection text match.
+- **`useSignMessage` error `cause` carries only `code` and `message`** (`@naculus/connect-appkit-react`, `@naculus/connect-appkit-vue`) — the raw wallet payload is no longer attached to `error.cause`. `code` and `message` on the error are unchanged.
+- **`AppkitConnectButton` shows the WalletConnect QR code** (`@naculus/connect-appkit-react`) — inside a `Web3ConnectProvider`, "Scan QR with any wallet" now calls `startPairing()`, passes the `wc:` URI to the modal and waits on `completePairing()`; before, the modal stayed on "Waiting for connection..." with no QR code. Retry restarts pairing and cancel calls `cancelPairing()`. A consumer that sets `onAppkitStartPairing` (such as the ui package's `ConnectButton`) still runs the flow itself.
+- **`<appkit-connect-button>` shows the Retry view on a failed pairing and closes after the wallet approves** (`@naculus/connect-appkit-wc`, `@naculus/connect-appkit-react`) — a `qrError` set while the modal is waiting or showing the QR code now switches it to the error view instead of leaving the spinner; Retry returns to the spinner and emits `appkitRetry`. The modal closes when the adapter clears `qrUri` without an error, and the React `AppkitConnectButton` clears `qrUri` once the provider reports a connected session.
+- **`AppkitConnectButton` switches to its connected view after a wallet connects** (`@naculus/connect-appkit-react`) — inside a `Web3ConnectProvider`, the wrapper now passes `connected` from the provider and `address` as the plain EVM address from its accounts, and its Disconnect calls the provider's `disconnect()`. A consumer-supplied `connected`, `address` or `onAppkitDisconnect` still wins.
+
 ## 0.15.0 — 2026-10-26
 
 Breaking release for connect-appkit. All six packages release in lockstep at 0.15.0 with connect-lib 0.15.0. Unpublished 0.14.2 changes are folded into this release. Migration: see connect-lib `docs/MIGRATION-0.15.md`.

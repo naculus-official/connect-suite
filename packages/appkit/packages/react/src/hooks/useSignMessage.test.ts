@@ -1,13 +1,14 @@
 /// <reference types="vitest" />
 /// @vitest-environment jsdom
 
-import { describe, it, expect, vi, beforeEach } from "vitest";
-import { renderHook, act } from "@testing-library/react";
+import { act, renderHook } from "@testing-library/react";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mockUseWeb3 = vi.fn();
 vi.mock("../provider/Web3ConnectProvider", () => ({
   useWeb3: () => mockUseWeb3(),
-  Web3ConnectProvider: ({ children }: { children: React.ReactNode }) => children,
+  Web3ConnectProvider: ({ children }: { children: React.ReactNode }) =>
+    children,
 }));
 
 const mockSignMessage = vi.fn();
@@ -16,6 +17,7 @@ vi.mock("../client", () => ({
   getClient: () => mockGetClient(),
 }));
 
+import { getUserFriendlyError } from "../utils/errorMessages";
 import { useSignMessage } from "./useSignMessage";
 
 function createMockSession() {
@@ -64,7 +66,10 @@ describe("useSignMessage", () => {
   });
 
   it("should throw when client not initialized", async () => {
-    mockUseWeb3.mockReturnValue({ session: createMockSession(), chainId: "eip155:1" });
+    mockUseWeb3.mockReturnValue({
+      session: createMockSession(),
+      chainId: "eip155:1",
+    });
     mockGetClient.mockReturnValue(null);
 
     const { result } = renderHook(() => useSignMessage());
@@ -78,7 +83,10 @@ describe("useSignMessage", () => {
 
   it("should sign a message successfully", async () => {
     mockSignMessage.mockResolvedValue("0xsignature123");
-    mockUseWeb3.mockReturnValue({ session: createMockSession(), chainId: "eip155:1" });
+    mockUseWeb3.mockReturnValue({
+      session: createMockSession(),
+      chainId: "eip155:1",
+    });
     mockGetClient.mockReturnValue({
       signMessage: mockSignMessage,
     });
@@ -106,7 +114,10 @@ describe("useSignMessage", () => {
       resolvePromise = resolve;
     });
     mockSignMessage.mockReturnValue(signPromise);
-    mockUseWeb3.mockReturnValue({ session: createMockSession(), chainId: "eip155:1" });
+    mockUseWeb3.mockReturnValue({
+      session: createMockSession(),
+      chainId: "eip155:1",
+    });
     mockGetClient.mockReturnValue({
       signMessage: mockSignMessage,
     });
@@ -130,7 +141,10 @@ describe("useSignMessage", () => {
 
   it("should capture error on failed signing", async () => {
     mockSignMessage.mockRejectedValue(new Error("User rejected"));
-    mockUseWeb3.mockReturnValue({ session: createMockSession(), chainId: "eip155:1" });
+    mockUseWeb3.mockReturnValue({
+      session: createMockSession(),
+      chainId: "eip155:1",
+    });
     mockGetClient.mockReturnValue({
       signMessage: mockSignMessage,
     });
@@ -147,5 +161,82 @@ describe("useSignMessage", () => {
 
     expect(result.current.error).not.toBeNull();
     expect(result.current.error?.message).toBe("User rejected");
+  });
+
+  describe("EIP-1193 wallet errors", () => {
+    async function failWith(cause: unknown) {
+      mockSignMessage.mockRejectedValue(cause);
+      mockUseWeb3.mockReturnValue({
+        session: createMockSession(),
+        chainId: "eip155:1",
+      });
+      mockGetClient.mockReturnValue({ signMessage: mockSignMessage });
+      const { result } = renderHook(() => useSignMessage());
+      let thrown: unknown;
+      await act(async () => {
+        try {
+          await result.current.signMessage("hello");
+        } catch (err) {
+          thrown = err;
+        }
+      });
+      return { error: result.current.error, thrown };
+    }
+
+    it("keeps code 4100 from a plain provider error object", async () => {
+      const cause = {
+        code: 4100,
+        message:
+          "The requested account and/or method has not been authorized by the user.",
+      };
+      const { error, thrown } = await failWith(cause);
+      expect(error?.code).toBe(4100);
+      expect(error?.message).toBe(cause.message);
+      expect(error?.cause).toEqual({ code: 4100, message: cause.message });
+      expect(error?.cause).not.toBe(cause);
+      expect(thrown).toBe(error);
+    });
+
+    it("does not carry extra wallet fields on cause", async () => {
+      const { error } = await failWith({
+        code: 4100,
+        message: "not authorized",
+        data: { secret: "raw-payload" },
+        extra: 1,
+      });
+      const c = error?.cause as Record<string, unknown>;
+      expect(Object.keys(c).sort()).toEqual(["code", "message"]);
+      expect(c).not.toHaveProperty("data");
+      expect(c).not.toHaveProperty("extra");
+      expect(error?.code).toBe(4100);
+    });
+
+    it("still recognizes a 4001 as a user rejection", async () => {
+      const { error } = await failWith({
+        code: 4001,
+        message: "User rejected the request.",
+      });
+      expect(error?.code).toBe(4001);
+      expect(getUserFriendlyError(error).code).toBe("user_rejected");
+
+      // An Error carrying 4001 is passed through as the same object.
+      const rejection = Object.assign(new Error("User rejected the request."), {
+        code: 4001,
+      });
+      const second = await failWith(rejection);
+      expect(second.error).toBe(rejection);
+      expect(getUserFriendlyError(second.error).code).toBe("user_rejected");
+    });
+
+    it("keeps a generic Error unchanged and a bare failure generic", async () => {
+      const generic = new Error("boom");
+      const first = await failWith(generic);
+      expect(first.error).toBe(generic);
+      expect(first.error?.code).toBeUndefined();
+
+      const second = await failWith({});
+      expect(second.error?.message).toBe("Signing failed");
+      expect(second.error?.code).toBeUndefined();
+    });
   });
 });

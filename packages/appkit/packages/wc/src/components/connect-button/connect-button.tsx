@@ -93,6 +93,11 @@ export class AppkitConnectButton {
     this.appkitStartPairing.emit()
   }
 
+  private retryPairing() {
+    this.view = "loading-qr"; this.qrError = null
+    this.appkitRetry.emit()
+  }
+
   private selectWallet(id: string) {
     this.search = ""
     this.selectedWalletId = id
@@ -136,6 +141,20 @@ export class AppkitConnectButton {
 
   // ── Watch qrUri changes from adapter ───────────────────────────
   componentWillRender() {
+    const pairing = this.view === "loading-qr" || this.view === "qr-ready"
+    // A failed pairing replaces the spinner or QR with the Retry view.
+    if (this.qrError && pairing) {
+      this.view = "qr-error"
+      return
+    }
+    // The adapter cleared the URI without an error: the wallet approved, so
+    // there is nothing left to scan. Close without emitting a cancel.
+    if (this.view === "qr-ready" && !this.qrUri && !this.qrLoading) {
+      this.view = "menu"
+      this.modalOpen = false
+      this.dialogEl?.close()
+      return
+    }
     if (this.qrLoading && this.view !== "loading-qr") {
       this.view = "loading-qr"
     }
@@ -304,7 +323,7 @@ export class AppkitConnectButton {
               {this.view === "qr-error" && (
                 <div class="qr-center">
                   <div class="qr-error-text">{this.qrError || "Connection failed"}</div>
-                  <appkit-button variant="default" size="sm" onClick={() => this.appkitRetry.emit()}>Retry</appkit-button>
+                  <appkit-button variant="default" size="sm" onClick={() => this.retryPairing()}>Retry</appkit-button>
                   <appkit-button variant="ghost" size="sm" onClick={() => this.closeModal()}>
                     Cancel
                   </appkit-button>
