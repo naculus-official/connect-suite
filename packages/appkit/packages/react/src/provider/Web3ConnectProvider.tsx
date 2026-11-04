@@ -737,6 +737,19 @@ function pairingErrorMessage(err: unknown): string {
  * `onAppkitStartPairing` (as the ui package's `ConnectButton` does) owns the
  * flow and the wrapper passes everything through untouched.
  */
+/**
+ * The plain EVM address the connect button shows, from the provider's
+ * accounts: the first `eip155:` CAIP-10 entry or bare 0x address, with any
+ * CAIP-10 prefix dropped. Empty when no EVM account is connected.
+ */
+function plainEvmAddress(accounts: readonly string[]): string {
+  const evm = accounts.find(
+    (a) => a.startsWith("eip155:") || /^0x[0-9a-fA-F]{40}$/.test(a),
+  );
+  if (!evm) return "";
+  return evm.split(":").pop() ?? "";
+}
+
 const WiredAppkitConnectButton = forwardRef<
   unknown,
   GeneratedConnectButtonProps
@@ -784,14 +797,37 @@ const WiredAppkitConnectButton = forwardRef<
     setQrError(null);
   }, [ctx]);
 
-  if (!ctx || props.onAppkitStartPairing !== undefined) {
+  if (!ctx) {
     return <GeneratedAppkitConnectButton {...props} ref={forwardedRef} />;
+  }
+
+  // The element decides its connected view from `connected` and `address`;
+  // fill them from the provider unless the consumer set them.
+  const accountProps = {
+    connected: props.connected ?? ctx.isConnected,
+    address: props.address ?? plainEvmAddress(ctx.accounts),
+    onAppkitDisconnect:
+      props.onAppkitDisconnect ??
+      (() => {
+        void ctx.disconnect();
+      }),
+  };
+
+  if (props.onAppkitStartPairing !== undefined) {
+    return (
+      <GeneratedAppkitConnectButton
+        {...props}
+        {...accountProps}
+        ref={forwardedRef}
+      />
+    );
   }
 
   const { onAppkitRetry, onAppkitCancelPairing } = props;
   return (
     <GeneratedAppkitConnectButton
       {...props}
+      {...accountProps}
       ref={forwardedRef}
       qrUri={props.qrUri ?? qrUri}
       qrError={props.qrError ?? qrError}

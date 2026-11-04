@@ -443,6 +443,58 @@ describe("AppkitConnectButton", () => {
     expect(lastConnectButtonProps.current.qrUri).toBeNull();
   });
 
+  async function connectThroughSessionManager() {
+    const onConnected = mockSessionManager.on.mock.calls.find(
+      ([event]) => event === "sessionConnected",
+    )?.[1];
+    await act(async () => {
+      onConnected({
+        bundle: { walletSession: mockSession, activeChainId: "eip155:1" },
+      });
+    });
+  }
+
+  it("passes the provider's connected state and plain address to the element", async () => {
+    render(
+      <Web3ConnectProvider config={baseConfig as any} autoConnect={false}>
+        <AppkitConnectButton />
+      </Web3ConnectProvider>,
+    );
+    expect(lastConnectButtonProps.current.connected).toBe(false);
+    expect(lastConnectButtonProps.current.address).toBe("");
+
+    await connectThroughSessionManager();
+
+    expect(lastConnectButtonProps.current.connected).toBe(true);
+    expect(lastConnectButtonProps.current.address).toBe(
+      "0x1234567890abcdef1234567890abcdef12345678",
+    );
+  });
+
+  it("keeps a consumer-supplied connected prop", async () => {
+    render(
+      <Web3ConnectProvider config={baseConfig as any} autoConnect={false}>
+        <AppkitConnectButton connected={false} />
+      </Web3ConnectProvider>,
+    );
+    await connectThroughSessionManager();
+    expect(lastConnectButtonProps.current.connected).toBe(false);
+  });
+
+  it("disconnects through the provider when no consumer handler is given", async () => {
+    render(
+      <Web3ConnectProvider config={baseConfig as any} autoConnect={false}>
+        <AppkitConnectButton />
+      </Web3ConnectProvider>,
+    );
+    await connectThroughSessionManager();
+    await act(async () => {
+      lastConnectButtonProps.current.onAppkitDisconnect();
+    });
+    expect(mockClient.disconnect).toHaveBeenCalledTimes(1);
+    expect(lastConnectButtonProps.current.connected).toBe(false);
+  });
+
   it("leaves the flow to a consumer that handles appkitStartPairing", () => {
     const onAppkitStartPairing = vi.fn();
     render(
