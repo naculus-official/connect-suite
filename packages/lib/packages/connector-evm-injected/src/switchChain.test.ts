@@ -1,12 +1,33 @@
 import type { UniversalWalletSession } from "@naculus/connect-core";
 import { createEmptySession } from "@naculus/connect-core";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { DiscoveredWallet, Eip6963EthereumProvider } from "./index";
 import { EIP6963Connector } from "./index";
 
-function createMockProvider() {
+/**
+ * A provider that behaves like an honest wallet: wallet_switchEthereumChain
+ * moves it, and eth_chainId reports where it is. Tests that need a dishonest
+ * wallet override single replies with mockResolvedValueOnce.
+ */
+function createMockProvider(initialChainId = "0x1") {
+  let currentChainId = initialChainId;
   return {
-    request: vi.fn(),
+    request: vi.fn(
+      async ({
+        method,
+        params,
+      }: {
+        method: string;
+        params?: unknown[];
+      }): Promise<unknown> => {
+        if (method === "wallet_switchEthereumChain") {
+          currentChainId = (params as [{ chainId: string }])[0].chainId;
+          return null;
+        }
+        if (method === "eth_chainId") return currentChainId;
+        return null;
+      },
+    ),
     on: vi.fn(),
     removeListener: vi.fn(),
   };
@@ -80,14 +101,14 @@ describe("EIP6963Connector.switchChain", () => {
 
   it("adds Base Sepolia via wallet_addEthereumChain on 4902 and retries switch", async () => {
     const providerRequest = provider.request as ReturnType<typeof vi.fn>;
-    providerRequest
-      .mockRejectedValueOnce({ code: 4902, message: "Chain not recognized" })
-      .mockResolvedValueOnce(null)
-      .mockResolvedValueOnce(null);
+    providerRequest.mockRejectedValueOnce({
+      code: 4902,
+      message: "Chain not recognized",
+    });
 
     await connector.switchChain(session, "eip155:84532");
 
-    expect(providerRequest).toHaveBeenCalledTimes(3);
+    expect(providerRequest).toHaveBeenCalledTimes(4);
     expect(providerRequest).toHaveBeenNthCalledWith(1, {
       method: "wallet_switchEthereumChain",
       params: [{ chainId: "0x14a34" }],
@@ -114,14 +135,11 @@ describe("EIP6963Connector.switchChain", () => {
   it("adds the chain when the wallet wraps 4902 in an internal error (Rabby)", async () => {
     const providerRequest = provider.request as ReturnType<typeof vi.fn>;
     // Shape returned by Rabby 0.94 for an unknown chain.
-    providerRequest
-      .mockRejectedValueOnce({
-        code: -32603,
-        message: 'Unrecognized chain ID "0x14a34".',
-        data: { originalError: { code: 4902 } },
-      })
-      .mockResolvedValueOnce(null)
-      .mockResolvedValueOnce(null);
+    providerRequest.mockRejectedValueOnce({
+      code: -32603,
+      message: 'Unrecognized chain ID "0x14a34".',
+      data: { originalError: { code: 4902 } },
+    });
 
     await connector.switchChain(session, "eip155:84532");
 
@@ -161,18 +179,12 @@ describe("EIP6963Connector.switchChain", () => {
   });
 
   it("should update session chains when switching to new chain", async () => {
-    const providerRequest = provider.request as ReturnType<typeof vi.fn>;
-    providerRequest.mockResolvedValue(null);
-
     await connector.switchChain(session, "eip155:137");
 
     expect(session.namespaces.eip155?.chains).toContain("eip155:137");
   });
 
   it("should keep existing chains when adding a new one", async () => {
-    const providerRequest = provider.request as ReturnType<typeof vi.fn>;
-    providerRequest.mockResolvedValue(null);
-
     await connector.switchChain(session, "eip155:137");
 
     expect(session.namespaces.eip155?.chains).toContain("eip155:1");
@@ -181,10 +193,7 @@ describe("EIP6963Connector.switchChain", () => {
 
   it("should handle raw hex chainId without eip155: prefix", async () => {
     const providerRequest = provider.request as ReturnType<typeof vi.fn>;
-    providerRequest
-      .mockRejectedValueOnce({ code: 4902, message: "Not found" })
-      .mockResolvedValueOnce(null)
-      .mockResolvedValueOnce(null);
+    providerRequest.mockRejectedValueOnce({ code: 4902, message: "Not found" });
 
     await connector.switchChain(session, "0x89");
 
@@ -196,6 +205,102 @@ describe("EIP6963Connector.switchChain", () => {
       method: "wallet_addEthereumChain",
       params: [expect.objectContaining({ chainId: "0x89" })],
     });
+  });
+});
+
+describe("EIP6963Connector.switchChain — verifies the wallet moved", () => {
+  let connector: EIP6963Connector;
+  let provider: ReturnType<typeof createMockProvider>;
+  let wallet: DiscoveredWallet;
+  let session: UniversalWalletSession;
+  let eipSession: ReturnType<typeof createMockEIP6963Session>;
+
+  beforeEach(() => {
+    connector = new EIP6963Connector();
+    provider = createMockProvider("0xaa36a7");
+    wallet = createMockDiscoveredWallet(provider);
+    session = createSession("11155111");
+    eipSession = createMockEIP6963Session(wallet);
+    eipSession.chains = ["eip155:11155111"];
+    (connector as any).activeSessions.set(wallet.id, eipSession);
+  });
+
+  it("throws chain_mismatch when the wallet replies null but stays on the old chain", async () => {
+    // Phantom: wallet_switchEthereumChain -> null, eth_chainId still Sepolia.
+    provider.request
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce("0xaa36a7");
+
+    await expect(
+      connector.switchChain(session, "eip155:84532"),
+    ).rejects.toMatchObject({ name: "WalletError", code: "chain_mismatch" });
+    expect(provider.request).toHaveBeenNthCalledWith(2, {
+      method: "eth_chainId",
+    });
+    // Success was not reported: the session still points at the old chain.
+    expect(session.namespaces.eip155?.chains).toEqual(["eip155:11155111"]);
+    expect(eipSession.chains).toEqual(["eip155:11155111"]);
+  });
+
+  it("fails closed with chain_mismatch when eth_chainId is not supported", async () => {
+    provider.request
+      .mockResolvedValueOnce(null)
+      .mockRejectedValueOnce({ code: 4200, message: "Unsupported method" });
+
+    await expect(
+      connector.switchChain(session, "eip155:84532"),
+    ).rejects.toMatchObject({ code: "chain_mismatch" });
+    expect(session.namespaces.eip155?.chains).toEqual(["eip155:11155111"]);
+  });
+
+  it("fails closed with chain_mismatch when eth_chainId returns nothing", async () => {
+    provider.request.mockResolvedValueOnce(null).mockResolvedValueOnce(null);
+
+    await expect(
+      connector.switchChain(session, "eip155:84532"),
+    ).rejects.toMatchObject({ code: "chain_mismatch" });
+    expect(session.namespaces.eip155?.chains).toEqual(["eip155:11155111"]);
+  });
+
+  it("verifies the retried switch after wallet_addEthereumChain too", async () => {
+    provider.request
+      .mockRejectedValueOnce({ code: 4902, message: "Chain not recognized" })
+      .mockResolvedValueOnce(null) // wallet_addEthereumChain
+      .mockResolvedValueOnce(null) // retried switch, wallet does not move
+      .mockResolvedValueOnce("0xaa36a7");
+
+    await expect(
+      connector.switchChain(session, "eip155:84532"),
+    ).rejects.toMatchObject({ code: "chain_mismatch" });
+    expect(session.namespaces.eip155?.chains).toEqual(["eip155:11155111"]);
+  });
+
+  it("succeeds when the wallet replies null and eth_chainId is the requested chain", async () => {
+    provider.request
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce("0x14a34");
+
+    await connector.switchChain(session, "eip155:84532");
+
+    expect(session.namespaces.eip155?.chains[0]).toBe("eip155:84532");
+  });
+
+  it("keeps mapping a 4001 rejection as before and does not read eth_chainId", async () => {
+    provider.request.mockRejectedValueOnce({
+      code: 4001,
+      message: "User rejected the request",
+    });
+
+    const error = await connector
+      .switchChain(session, "eip155:84532")
+      .catch((e: unknown) => e);
+    expect(error).toMatchObject({
+      name: "WalletError",
+      code: "chain_unsupported",
+      message: "Failed to switch chain: User rejected the request",
+    });
+    expect(provider.request).toHaveBeenCalledTimes(1);
+    expect(session.namespaces.eip155?.chains).toEqual(["eip155:11155111"]);
   });
 });
 
@@ -220,7 +325,6 @@ describe("EIP6963Connector.switchChain — active chain tracking", () => {
       wallet.id,
       createMockEIP6963Session(wallet),
     );
-    (provider.request as ReturnType<typeof vi.fn>).mockResolvedValue(null);
   });
 
   it("promotes a chain that was already listed in the session", async () => {
@@ -280,4 +384,87 @@ describe("EIP6963Connector.switchChain — active chain tracking", () => {
       }),
     ).resolves.not.toThrow();
   });
+});
+
+describe("EIP6963Connector.switchChain — lagging eth_chainId", () => {
+  let connector: EIP6963Connector;
+  let provider: ReturnType<typeof createMockProvider>;
+  let wallet: DiscoveredWallet;
+  let session: UniversalWalletSession;
+  let eipSession: ReturnType<typeof createMockEIP6963Session>;
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    connector = new EIP6963Connector();
+    provider = createMockProvider("0xaa36a7");
+    wallet = createMockDiscoveredWallet(provider);
+    session = createSession("11155111");
+    eipSession = createMockEIP6963Session(wallet);
+    eipSession.chains = ["eip155:11155111"];
+    (connector as any).activeSessions.set(wallet.id, eipSession);
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  /** Runs switchChain to completion while advancing the retry delays. */
+  async function settle(promise: Promise<void>): Promise<unknown> {
+    const outcome = promise.then(
+      () => undefined,
+      (error: unknown) => error,
+    );
+    await vi.runAllTimersAsync();
+    return outcome;
+  }
+
+  it("succeeds when eth_chainId reports the new chain on a later read", async () => {
+    // Wallet moved, but its cached chainId updates only on chainChanged.
+    provider.request
+      .mockResolvedValueOnce(null) // wallet_switchEthereumChain
+      .mockResolvedValueOnce("0xaa36a7") // first read: still the old chain
+      .mockResolvedValueOnce("0x14a34"); // second read: caught up
+
+    const error = await settle(connector.switchChain(session, "eip155:84532"));
+
+    expect(error).toBeUndefined();
+    expect(session.namespaces.eip155?.chains[0]).toBe("eip155:84532");
+    expect(eipSession.chains[0]).toBe("eip155:84532");
+    expect(provider.request).toHaveBeenCalledTimes(3);
+  });
+
+  it("fails closed when eth_chainId never reports the new chain", async () => {
+    provider.request
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce("0xaa36a7")
+      .mockResolvedValueOnce("0xaa36a7")
+      .mockResolvedValueOnce("0xaa36a7");
+
+    const error = await settle(connector.switchChain(session, "eip155:84532"));
+
+    expect(error).toMatchObject({
+      name: "WalletError",
+      code: "chain_mismatch",
+    });
+    expect(session.namespaces.eip155?.chains).toEqual(["eip155:11155111"]);
+    expect(eipSession.chains).toEqual(["eip155:11155111"]);
+  });
+
+  it.each([
+    ["uppercase hex", "0X14A34"],
+    ["mixed-case hex", "0x14A34"],
+    ["decimal string", "84532"],
+  ])(
+    "accepts a %s eth_chainId reply for the requested chain",
+    async (_label, reply) => {
+      provider.request.mockResolvedValueOnce(null).mockResolvedValueOnce(reply);
+
+      const error = await settle(
+        connector.switchChain(session, "eip155:84532"),
+      );
+
+      expect(error).toBeUndefined();
+      expect(session.namespaces.eip155?.chains[0]).toBe("eip155:84532");
+    },
+  );
 });
