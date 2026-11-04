@@ -80,7 +80,7 @@ export class AppkitConnectButton {
   private openModal() {
     this.view = "menu"; this.search = ""; this.qrError = null
     this.modalOpen = true
-    setTimeout(() => this.dialogEl?.showModal(), 0)
+    // showModal() runs in componentDidRender, once the <dialog> exists.
   }
   private closeModal() {
     if (this.view !== "menu") this.appkitCancelPairing.emit()
@@ -162,6 +162,15 @@ export class AppkitConnectButton {
       this.view = "qr-ready"
       this.qrRendered = false
       this.qrError = null
+    }
+  }
+
+  // Stencil renders the <dialog> on its next write frame (requestAnimationFrame),
+  // which on WebKit comes after a setTimeout(0). Open it after the render that
+  // mounted it, so the modal does not stay closed (display: none).
+  componentDidRender() {
+    if (this.modalOpen && this.dialogEl && !this.dialogEl.open) {
+      this.dialogEl.showModal()
     }
   }
 
