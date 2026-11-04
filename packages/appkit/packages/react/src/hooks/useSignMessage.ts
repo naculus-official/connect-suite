@@ -1,6 +1,6 @@
-import { useState, useCallback } from "react";
-import { useWeb3 } from "../provider/Web3ConnectProvider";
 import { WalletError } from "@naculus/connect-core";
+import { useCallback, useState } from "react";
+import { useWeb3 } from "../provider/Web3ConnectProvider";
 import { resolveClient } from "./client-resolver";
 
 /**
@@ -14,9 +14,15 @@ function toSignError(cause: unknown): Error & { code?: number | string } {
   if (cause instanceof Error) return cause;
   if (!cause || typeof cause !== "object") return new Error("Signing failed");
   const { code, message } = cause as { code?: unknown; message?: unknown };
+  // Keep only the primitives on cause. The raw wallet payload can carry
+  // extra fields (data, provider internals) that should not travel further.
+  const safeCause: { code?: number | string; message?: string } = {};
+  if (typeof code === "number" || typeof code === "string")
+    safeCause.code = code;
+  if (typeof message === "string") safeCause.message = message;
   const error: Error & { code?: number | string } = new Error(
     typeof message === "string" && message ? message : "Signing failed",
-    { cause },
+    { cause: safeCause },
   );
   if (typeof code === "number" || typeof code === "string") error.code = code;
   return error;
@@ -38,8 +44,9 @@ export function useSignMessage() {
         throw err;
       }
 
-      const address = session.namespaces.eip155?.accounts[0]
-        ?? Object.values(session.namespaces)[0]?.accounts[0];
+      const address =
+        session.namespaces.eip155?.accounts[0] ??
+        Object.values(session.namespaces)[0]?.accounts[0];
 
       if (!address) {
         const err = new WalletError("wallet_unavailable", "No account found");
@@ -58,7 +65,7 @@ export function useSignMessage() {
         const result = (await activeClient.signMessage(session, {
           message,
           address,
-          chainId: chainId ?? undefined
+          chainId: chainId ?? undefined,
         })) as string;
 
         return result;
@@ -70,12 +77,12 @@ export function useSignMessage() {
         setIsLoading(false);
       }
     },
-    [session, chainId, client]
+    [session, chainId, client],
   );
 
   return {
     signMessage,
     isSigning: isLoading,
-    error
+    error,
   };
 }

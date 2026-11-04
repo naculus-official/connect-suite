@@ -71,8 +71,23 @@ describe("useSignMessage", () => {
       const { error, thrown } = await failWith(cause);
       expect(error?.code).toBe(4100);
       expect(error?.message).toBe(cause.message);
-      expect(error?.cause).toBe(cause);
+      expect(error?.cause).toEqual({ code: 4100, message: cause.message });
+      expect(error?.cause).not.toBe(cause);
       expect(thrown).toBe(error);
+    });
+
+    it("does not carry extra wallet fields on cause", async () => {
+      const { error } = await failWith({
+        code: 4100,
+        message: "not authorized",
+        data: { secret: "raw-payload" },
+        extra: 1,
+      });
+      const c = error?.cause as Record<string, unknown>;
+      expect(Object.keys(c).sort()).toEqual(["code", "message"]);
+      expect(c).not.toHaveProperty("data");
+      expect(c).not.toHaveProperty("extra");
+      expect(error?.code).toBe(4100);
     });
 
     it("still surfaces a 4001 as a user rejection", async () => {

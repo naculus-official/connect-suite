@@ -23,9 +23,15 @@ function toSignError(cause: unknown): Error & { code?: number | string } {
   if (cause instanceof Error) return cause;
   if (!cause || typeof cause !== "object") return new Error("Signing failed");
   const { code, message } = cause as { code?: unknown; message?: unknown };
+  // Keep only the primitives on cause. The raw wallet payload can carry
+  // extra fields (data, provider internals) that should not travel further.
+  const safeCause: { code?: number | string; message?: string } = {};
+  if (typeof code === "number" || typeof code === "string")
+    safeCause.code = code;
+  if (typeof message === "string") safeCause.message = message;
   const error: Error & { code?: number | string } = new Error(
     typeof message === "string" && message ? message : "Signing failed",
-    { cause },
+    { cause: safeCause },
   );
   if (typeof code === "number" || typeof code === "string") error.code = code;
   return error;

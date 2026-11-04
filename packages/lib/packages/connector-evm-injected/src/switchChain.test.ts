@@ -285,7 +285,7 @@ describe("EIP6963Connector.switchChain — verifies the wallet moved", () => {
     expect(session.namespaces.eip155?.chains[0]).toBe("eip155:84532");
   });
 
-  it("keeps mapping a 4001 rejection as before and does not read eth_chainId", async () => {
+  it("maps a 4001 rejection to chain_switch_rejected and does not read eth_chainId", async () => {
     provider.request.mockRejectedValueOnce({
       code: 4001,
       message: "User rejected the request",
@@ -296,11 +296,42 @@ describe("EIP6963Connector.switchChain — verifies the wallet moved", () => {
       .catch((e: unknown) => e);
     expect(error).toMatchObject({
       name: "WalletError",
-      code: "chain_unsupported",
+      code: "chain_switch_rejected",
       message: "Failed to switch chain: User rejected the request",
     });
     expect(provider.request).toHaveBeenCalledTimes(1);
     expect(session.namespaces.eip155?.chains).toEqual(["eip155:11155111"]);
+  });
+
+  it("maps a wrapped 4001 (data.originalError.code) to chain_switch_rejected", async () => {
+    provider.request.mockRejectedValueOnce({
+      code: -32603,
+      message: "Internal JSON-RPC error",
+      data: { originalError: { code: 4001 } },
+    });
+
+    const error = await connector
+      .switchChain(session, "eip155:84532")
+      .catch((e: unknown) => e);
+    expect(error).toMatchObject({
+      name: "WalletError",
+      code: "chain_switch_rejected",
+    });
+  });
+
+  it("keeps a generic -32603 error mapped to chain_unsupported", async () => {
+    provider.request.mockRejectedValueOnce({
+      code: -32603,
+      message: "Internal JSON-RPC error",
+    });
+
+    const error = await connector
+      .switchChain(session, "eip155:84532")
+      .catch((e: unknown) => e);
+    expect(error).toMatchObject({
+      name: "WalletError",
+      code: "chain_unsupported",
+    });
   });
 });
 

@@ -15,6 +15,7 @@ and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 
 ### Fixed
 
+- **A user rejection of a chain switch is reported as `chain_switch_rejected`** (`@naculus/connector-evm-injected`) — EIP-1193 code 4001 (top-level or in `data.originalError`) from `wallet_switchEthereumChain` now maps to `chain_switch_rejected` instead of `chain_unsupported`. Other errors keep their mapping.
 - **Batch signing for Wallet Standard wallets that register only `solana:signTransaction`** (`@naculus/connector-solana`) — `roles.signer.signAllTransactions` is now exposed and sends the batch as one approval through the variadic `signTransaction` feature instead of one approval per transaction.
 
 ## 0.15.0 — 2026-10-26

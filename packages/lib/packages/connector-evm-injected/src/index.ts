@@ -1138,6 +1138,16 @@ class EIP6963ConnectorImpl implements UniversalConnector {
           method: "wallet_switchEthereumChain",
           params: [{ chainId: hexChainId }],
         });
+      } else if (
+        rpcError?.code === 4001 ||
+        rpcError?.data?.originalError?.code === 4001
+      ) {
+        // EIP-1193 4001 = the user rejected the switch in the wallet. Report
+        // it as a rejection so SessionManager maps it to chain_switch_rejected.
+        throw new WalletError(
+          "chain_switch_rejected",
+          `Failed to switch chain: ${rpcError?.message ?? String(error)}`,
+        );
       } else {
         throw new WalletError(
           "chain_unsupported",
