@@ -764,9 +764,18 @@ const WiredAppkitConnectButton = forwardRef<
         });
       })
       .catch((err: unknown) => {
-        if (!attempt.aborted) setQrError(pairingErrorMessage(err));
+        if (attempt.aborted) return;
+        setQrUri(null);
+        setQrError(pairingErrorMessage(err));
       });
   }, [ctx]);
+
+  // Close the QR view once the provider holds a connected session, whatever
+  // path got it there, as the ui package's ConnectButtonAdapter does.
+  const isConnected = ctx?.isConnected ?? false;
+  useEffect(() => {
+    if (isConnected) setQrUri(null);
+  }, [isConnected]);
 
   const cancelPairingFlow = useCallback(() => {
     attemptRef.current.aborted = true;

@@ -400,6 +400,49 @@ describe("AppkitConnectButton", () => {
     expect(lastConnectButtonProps.current.qrUri).toBe(uri);
   });
 
+  it("passes the error to the modal and drops the URI when pairing fails", async () => {
+    mockClient.startPairing.mockResolvedValue("wc:abc@2?symKey=def");
+    mockClient.completePairing.mockRejectedValue(new Error("relay down"));
+
+    render(
+      <Web3ConnectProvider config={baseConfig as any} autoConnect={false}>
+        <AppkitConnectButton />
+      </Web3ConnectProvider>,
+    );
+    await act(async () => {
+      lastConnectButtonProps.current.onAppkitStartPairing();
+    });
+
+    expect(lastConnectButtonProps.current.qrError).toBe("relay down");
+    expect(lastConnectButtonProps.current.qrUri).toBeNull();
+  });
+
+  it("clears the URI once the provider reports a connected session", async () => {
+    mockClient.startPairing.mockResolvedValue("wc:abc@2?symKey=def");
+    mockClient.completePairing.mockReturnValue(new Promise(() => {}));
+
+    render(
+      <Web3ConnectProvider config={baseConfig as any} autoConnect={false}>
+        <AppkitConnectButton />
+      </Web3ConnectProvider>,
+    );
+    await act(async () => {
+      lastConnectButtonProps.current.onAppkitStartPairing();
+    });
+    expect(lastConnectButtonProps.current.qrUri).toBe("wc:abc@2?symKey=def");
+
+    const onConnected = mockSessionManager.on.mock.calls.find(
+      ([event]) => event === "sessionConnected",
+    )?.[1];
+    await act(async () => {
+      onConnected({
+        bundle: { walletSession: mockSession, activeChainId: "eip155:1" },
+      });
+    });
+
+    expect(lastConnectButtonProps.current.qrUri).toBeNull();
+  });
+
   it("leaves the flow to a consumer that handles appkitStartPairing", () => {
     const onAppkitStartPairing = vi.fn();
     render(
