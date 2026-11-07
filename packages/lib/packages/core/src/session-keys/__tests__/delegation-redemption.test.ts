@@ -463,3 +463,48 @@ describe("eip7702 session keys: period windows follow chain time", () => {
     });
   });
 });
+
+describe("eip7702 session keys: parallel redemptions cannot overspend a period", () => {
+  const START = 1_000_000;
+  const period = { amount: 500n, seconds: 100, start: START };
+
+  it("accepts exactly the amount that fits when many redemptions race", async () => {
+    const manager = new SessionKeyManager(
+      { pbkdf2Iterations: 1_000, unsafeAllowWeakKdf: true, encryptionKey: "k" },
+      new MemoryStorageAdapter(),
+    );
+    const info = await manager.createSessionKey(
+      { ...scope, periodLimits: { [USDC]: period } },
+      OWNER,
+    );
+    const delegation = await manager.prepareDelegation(info.id, 8453, 1n);
+    await manager.attachDelegation(
+      info.id,
+      delegation,
+      sign(delegationSigningDigest(delegation)),
+    );
+    const chainTime = { timestamp: START + 10, inclusionMarginSeconds: 12 };
+    const attempts = Array.from({ length: 10 }, async () => {
+      const execution = transfer(PAYEE, 100n);
+      const call = await manager.buildDelegationRedemption(info.id, execution);
+      return manager.signTransactionDelegationRedemption(
+        info.id,
+        redemptionTx(call),
+        {},
+        execution,
+        chainTime,
+      );
+    });
+    const results = await Promise.allSettled(attempts);
+    const accepted = results.filter((r) => r.status === "fulfilled");
+    const refused = results.filter(
+      (r): r is PromiseRejectedResult => r.status === "rejected",
+    );
+    // 500 allows exactly five 100-unit redemptions in one window.
+    expect(accepted).toHaveLength(5);
+    expect(refused).toHaveLength(5);
+    for (const r of refused) {
+      expect(r.reason).toMatchObject({ code: "session_key_scope_exceeded" });
+    }
+  });
+});
