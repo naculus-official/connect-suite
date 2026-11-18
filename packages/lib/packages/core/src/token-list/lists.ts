@@ -232,9 +232,9 @@ export const OPTIMISM_TOKENS: TokenListEntry[] = [
   },
   {
     chainId: 10,
-    address: "0x94b008aA00579c1307B0EF2c499aD98a8ce58e58",
-    name: "Tether USD (Optimism)",
-    symbol: "USDT",
+    address: "0x01bFF41798a0BcF287b996046Ca68b395DbC1071",
+    name: "USD₮0 (Optimism)",
+    symbol: "USDT0",
     decimals: 6,
     logoURI: "https://cryptologos.cc/logos/tether-usdt-logo.png",
     tags: ["stablecoin"],

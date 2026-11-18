@@ -56,7 +56,7 @@ export const CHAINS: Record<number, ChainInfo> = {
     rpcUrls: EIP155_PUBLIC_RPC_URLS["eip155:10"],
     usdcAddress: "0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85",
     usdcVariant: "native",
-    usdtAddress: "0x94b008aA00579c1307B0EF2c499aD98a8ce58e58",
+    usdtAddress: "0x01bFF41798a0BcF287b996046Ca68b395DbC1071",
     entryPoint: "0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789",
     factoryAddress: "0x9406Cc6185a346906296840746125a0E44976454",
     explorerUrl: "https://optimistic.etherscan.io",
