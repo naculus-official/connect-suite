@@ -284,8 +284,8 @@ export const ARBITRUM_TOKENS: TokenListEntry[] = [
   {
     chainId: 42161,
     address: "0xFd086bC7CD5C481DCC9C85ebE478A1C0b69FCbb9",
-    name: "Tether USD (Arbitrum)",
-    symbol: "USDT",
+    name: "USD₮0 (Arbitrum)",
+    symbol: "USDT0",
     decimals: 6,
     logoURI: "https://cryptologos.cc/logos/tether-usdt-logo.png",
     tags: ["stablecoin"],

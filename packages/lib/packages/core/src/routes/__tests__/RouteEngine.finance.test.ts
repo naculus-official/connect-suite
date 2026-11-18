@@ -523,6 +523,9 @@ describe("USDC/USDT — token construction and chain support", () => {
     expect(CHAINS[137].usdtAddress).toBe(
       "0xc2132D05D31c914a87C6611C10748AEb04B58e8F",
     );
+    expect(CHAINS[10].usdtAddress).toBe(
+      "0x01bFF41798a0BcF287b996046Ca68b395DbC1071",
+    );
   });
 
   it("USDC/USDT decimals resolve from chain-registry usdcDecimals/usdtDecimals (default 6)", async () => {
